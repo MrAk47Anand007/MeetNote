@@ -2,21 +2,25 @@ package com.meetnote.android.ui.session
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.meetnote.shared.domain.model.ProcessingMode
 
 @Composable
 fun SessionScreen(
     state: SessionUiState,
     onTitleChanged: (String) -> Unit,
+    onModeSelected: (ProcessingMode) -> Unit,
     onCreateSession: () -> Unit
 ) {
     Column(
@@ -30,7 +34,7 @@ fun SessionScreen(
             style = MaterialTheme.typography.headlineMedium
         )
         Text(
-            text = "Create a record-then-process session to verify Android shell wiring.",
+            text = "Create a manual session to verify Android shell wiring.",
             style = MaterialTheme.typography.bodyLarge
         )
         OutlinedTextField(
@@ -40,8 +44,32 @@ fun SessionScreen(
             label = { Text("Meeting title") },
             singleLine = true
         )
-        Button(onClick = onCreateSession) {
-            Text("Create Record-Then-Process Session")
+        Text(
+            text = "Processing mode",
+            style = MaterialTheme.typography.titleMedium
+        )
+        ProcessingModeOption(
+            label = "Live Assist",
+            selected = state.selectedMode == ProcessingMode.LIVE_ASSIST,
+            onSelected = { onModeSelected(ProcessingMode.LIVE_ASSIST) }
+        )
+        ProcessingModeOption(
+            label = "Record Then Process",
+            selected = state.selectedMode == ProcessingMode.RECORD_THEN_PROCESS,
+            onSelected = { onModeSelected(ProcessingMode.RECORD_THEN_PROCESS) }
+        )
+        Button(
+            onClick = onCreateSession,
+            enabled = !state.isCreating
+        ) {
+            Text(if (state.isCreating) "Creating Session..." else "Create Session")
+        }
+        state.errorMessage?.let { errorMessage ->
+            Text(
+                text = errorMessage,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error
+            )
         }
         state.createdSessionId?.let { sessionId ->
             Text(
@@ -49,5 +77,23 @@ fun SessionScreen(
                 style = MaterialTheme.typography.bodyMedium
             )
         }
+    }
+}
+
+@Composable
+private fun ProcessingModeOption(
+    label: String,
+    selected: Boolean,
+    onSelected: () -> Unit
+) {
+    Row(modifier = Modifier.fillMaxWidth()) {
+        RadioButton(
+            selected = selected,
+            onClick = onSelected
+        )
+        Text(
+            text = label,
+            modifier = Modifier.padding(top = 12.dp)
+        )
     }
 }

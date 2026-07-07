@@ -14,6 +14,7 @@ fun MeetNoteApp(viewModel: SessionViewModel = koinViewModel()) {
     SessionScreen(
         state = state,
         onTitleChanged = viewModel::updateTitle,
+        onModeSelected = viewModel::selectMode,
         onCreateSession = viewModel::createSession
     )
 }

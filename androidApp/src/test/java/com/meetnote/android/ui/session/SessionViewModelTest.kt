@@ -2,12 +2,12 @@ package com.meetnote.android.ui.session
 
 import com.meetnote.shared.core.SessionId
 import com.meetnote.shared.domain.model.MeetingSession
+import com.meetnote.shared.domain.model.ProcessingMode
 import com.meetnote.shared.domain.model.ProcessingPolicy
 import com.meetnote.shared.domain.model.ProcessingTier
-import com.meetnote.shared.domain.model.ProcessingMode
 import com.meetnote.shared.domain.model.SessionStatus
-import com.meetnote.shared.domain.usecase.CreateManualSessionUseCase
 import com.meetnote.shared.domain.repository.SessionRepository
+import com.meetnote.shared.domain.usecase.CreateManualSessionUseCase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -18,9 +18,10 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
-import org.junit.Assert.assertEquals
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SessionViewModelTest {
@@ -37,39 +38,75 @@ class SessionViewModelTest {
     }
 
     @Test
-    fun createSessionUsesFallbackTitleAndExposesCreatedSessionId() = runTest(dispatcher) {
-        var createdSession: MeetingSession? = null
-        val viewModel = SessionViewModel(
-            createManualSession = CreateManualSessionUseCase(
-                object : SessionRepository {
-                    override suspend fun createSession(session: MeetingSession): MeetingSession {
-                        createdSession = session
-                        return session
-                    }
+    fun createSessionUsesFallbackTitleAndSelectedMode() = runTest(dispatcher) {
+        val repository = FakeSessionRepository()
+        val viewModel = createViewModel(repository)
 
-                    override fun observeSessions(): Flow<List<MeetingSession>> = flowOf(emptyList())
+        viewModel.selectMode(ProcessingMode.LIVE_ASSIST)
+        viewModel.createSession()
+        advanceUntilIdle()
 
-                    override suspend fun updateStatus(sessionId: SessionId, status: SessionStatus) = Unit
-
-                    override suspend fun updateProcessingConfig(
-                        sessionId: SessionId,
-                        processingPolicy: ProcessingPolicy,
-                        processingTier: ProcessingTier
-                    ) = Unit
-
-                    override suspend fun attachAudioFile(
-                        sessionId: SessionId,
-                        audioFilePath: String
-                    ) = Unit
-                }
-            )
+        assertEquals("Untitled Meeting", repository.createdSessions.single().title)
+        assertEquals(ProcessingMode.LIVE_ASSIST, repository.createdSessions.single().processingMode)
+        assertEquals(
+            repository.createdSessions.single().id.value,
+            viewModel.uiState.value.createdSessionId
         )
+        assertNull(viewModel.uiState.value.errorMessage)
+    }
+
+    @Test
+    fun createSessionExposesFailureAndAllowsRetry() = runTest(dispatcher) {
+        val repository = FakeSessionRepository()
+        repository.failNextCreate = true
+        val viewModel = createViewModel(repository)
 
         viewModel.createSession()
         advanceUntilIdle()
 
-        assertEquals("Untitled Meeting", createdSession?.title)
-        assertEquals(ProcessingMode.RECORD_THEN_PROCESS, createdSession?.processingMode)
-        assertEquals(createdSession?.id?.value, viewModel.uiState.value.createdSessionId)
+        assertEquals("Unable to create session. Please try again.", viewModel.uiState.value.errorMessage)
+        assertNull(viewModel.uiState.value.createdSessionId)
+        assertEquals(false, viewModel.uiState.value.isCreating)
+
+        viewModel.selectMode(ProcessingMode.RECORD_THEN_PROCESS)
+        viewModel.createSession()
+        advanceUntilIdle()
+
+        assertEquals(1, repository.createdSessions.size)
+        assertEquals(
+            repository.createdSessions.single().id.value,
+            viewModel.uiState.value.createdSessionId
+        )
+        assertNull(viewModel.uiState.value.errorMessage)
+        assertEquals(false, viewModel.uiState.value.isCreating)
     }
+
+    private fun createViewModel(repository: FakeSessionRepository): SessionViewModel =
+        SessionViewModel(CreateManualSessionUseCase(repository))
+}
+
+private class FakeSessionRepository : SessionRepository {
+    val createdSessions = mutableListOf<MeetingSession>()
+    var failNextCreate = false
+
+    override suspend fun createSession(session: MeetingSession): MeetingSession {
+        if (failNextCreate) {
+            failNextCreate = false
+            error("create failed")
+        }
+        createdSessions += session
+        return session
+    }
+
+    override fun observeSessions(): Flow<List<MeetingSession>> = flowOf(emptyList())
+
+    override suspend fun updateStatus(sessionId: SessionId, status: SessionStatus) = Unit
+
+    override suspend fun updateProcessingConfig(
+        sessionId: SessionId,
+        processingPolicy: ProcessingPolicy,
+        processingTier: ProcessingTier
+    ) = Unit
+
+    override suspend fun attachAudioFile(sessionId: SessionId, audioFilePath: String) = Unit
 }

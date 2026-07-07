@@ -14,7 +14,9 @@ import org.koin.dsl.module
 data class SessionUiState(
     val title: String = "",
     val selectedMode: ProcessingMode = ProcessingMode.RECORD_THEN_PROCESS,
-    val createdSessionId: String? = null
+    val createdSessionId: String? = null,
+    val errorMessage: String? = null,
+    val isCreating: Boolean = false
 )
 
 class SessionViewModel(
@@ -27,13 +29,36 @@ class SessionViewModel(
         _uiState.value = _uiState.value.copy(title = title)
     }
 
+    fun selectMode(mode: ProcessingMode) {
+        _uiState.value = _uiState.value.copy(selectedMode = mode)
+    }
+
     fun createSession() {
+        val currentState = _uiState.value
+        _uiState.value = currentState.copy(
+            createdSessionId = null,
+            errorMessage = null,
+            isCreating = true
+        )
+
         viewModelScope.launch {
-            val session = createManualSession(
-                title = _uiState.value.title.ifBlank { "Untitled Meeting" },
-                processingMode = _uiState.value.selectedMode
-            )
-            _uiState.value = _uiState.value.copy(createdSessionId = session.id.value)
+            runCatching {
+                createManualSession(
+                    title = currentState.title.ifBlank { "Untitled Meeting" },
+                    processingMode = currentState.selectedMode
+                )
+            }.onSuccess { session ->
+                _uiState.value = _uiState.value.copy(
+                    createdSessionId = session.id.value,
+                    errorMessage = null,
+                    isCreating = false
+                )
+            }.onFailure {
+                _uiState.value = _uiState.value.copy(
+                    errorMessage = "Unable to create session. Please try again.",
+                    isCreating = false
+                )
+            }
         }
     }
 }

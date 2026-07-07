@@ -96,3 +96,66 @@ This keeps the intent of the task while preserving valid module boundaries.
 - `android-core/build.gradle.kts`
 - `android-core/src/main/java/com/meetnote/android/core/AppModules.kt`
 - `gradle/libs.versions.toml`
+
+## Task 4 Fix Pass After Review Findings
+
+### Review Items Addressed
+
+- Added Android shell support for both required manual session modes:
+  - `LIVE_ASSIST`
+  - `RECORD_THEN_PROCESS`
+- Added minimal UI-to-ViewModel interaction so mode choice is user-controlled instead of hard-wired.
+- Added a graceful failure path for manual session creation:
+  - ViewModel catches create failures
+  - UI state exposes a user-visible error message
+  - retry is supported by calling create again after the failure state
+
+### Narrow Scope Kept
+
+- Changes stayed inside the Task 4 Android shell surface:
+  - `androidApp/src/main/java/com/meetnote/android/ui/MeetNoteApp.kt`
+  - `androidApp/src/main/java/com/meetnote/android/ui/session/SessionScreen.kt`
+  - `androidApp/src/main/java/com/meetnote/android/ui/session/SessionViewModel.kt`
+  - `androidApp/src/test/java/com/meetnote/android/ui/session/SessionViewModelTest.kt`
+- No capture, background work, or AI implementation was added.
+
+### Implementation Notes
+
+- `SessionUiState` now carries:
+  - `selectedMode`
+  - `errorMessage`
+  - `isCreating`
+- `SessionViewModel` now:
+  - exposes `selectMode(mode)`
+  - clears prior success/error state before a new create attempt
+  - wraps `CreateManualSessionUseCase` in `runCatching`
+  - surfaces a simple retryable error message on failure
+- `SessionScreen` now:
+  - renders a simple processing mode picker with two radio-button options
+  - uses a generic create action label instead of mode-specific copy
+  - shows a user-visible error message when create fails
+  - disables the create button only while the current request is in flight
+
+### Focused Verification Evidence
+
+- Passed:
+  - `.\gradlew.bat :androidApp:testDebugUnitTest --tests com.meetnote.android.ui.session.SessionViewModelTest`
+  - `.\gradlew.bat :androidApp:compileDebugKotlin`
+
+### Test Coverage Added
+
+- `createSessionUsesFallbackTitleAndSelectedMode`
+  - verifies blank-title fallback
+  - verifies `LIVE_ASSIST` is forwarded to the use case instead of the prior hard-wired default path
+  - verifies success state still exposes the created session ID
+- `createSessionExposesFailureAndAllowsRetry`
+  - verifies create failure produces a user-visible error state
+  - verifies the failed attempt does not leave a stale created-session success state behind
+  - verifies a second create attempt succeeds and clears the error
+
+### Ongoing Concern
+
+- The pre-existing Kotlin Multiplatform / AGP compatibility warning is still present during Android builds:
+  - AGP `8.6.1`
+  - Kotlin plugin maximum tested AGP `8.5`
+- This did not block the fix-pass verification.
