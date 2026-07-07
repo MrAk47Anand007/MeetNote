@@ -1,0 +1,36 @@
+CREATE TABLE meeting_session (
+    id TEXT NOT NULL PRIMARY KEY,
+    title TEXT NOT NULL,
+    status TEXT NOT NULL,
+    processing_mode TEXT NOT NULL,
+    processing_policy TEXT NOT NULL,
+    processing_tier TEXT NOT NULL,
+    source TEXT NOT NULL,
+    audio_file_path TEXT
+);
+
+selectAll:
+SELECT * FROM meeting_session;
+
+insertSession:
+INSERT INTO meeting_session(
+    id,
+    title,
+    status,
+    processing_mode,
+    processing_policy,
+    processing_tier,
+    source,
+    audio_file_path
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+updateStatus:
+UPDATE meeting_session
+SET status = ?
+WHERE id = ?;
+
+attachAudioFile:
+UPDATE meeting_session
+SET audio_file_path = ?
+WHERE id = ?;
