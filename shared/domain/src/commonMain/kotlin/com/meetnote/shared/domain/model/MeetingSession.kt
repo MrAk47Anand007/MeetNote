@@ -7,6 +7,7 @@ data class MeetingSession(
     val title: String,
     val status: SessionStatus,
     val processingMode: ProcessingMode,
+    val processingPolicy: ProcessingPolicy,
     val processingTier: ProcessingTier,
     val source: SessionSource,
     val audioFilePath: String? = null

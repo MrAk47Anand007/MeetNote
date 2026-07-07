@@ -3,6 +3,7 @@ package com.meetnote.shared.domain.usecase
 import com.meetnote.shared.core.SessionId
 import com.meetnote.shared.domain.model.MeetingSession
 import com.meetnote.shared.domain.model.ProcessingMode
+import com.meetnote.shared.domain.model.ProcessingPolicy
 import com.meetnote.shared.domain.model.ProcessingTier
 import com.meetnote.shared.domain.model.SessionSource
 import com.meetnote.shared.domain.model.SessionStatus
@@ -15,7 +16,7 @@ import kotlin.test.assertEquals
 
 class CreateManualSessionUseCaseTest {
     @Test
-    fun createsManualRecordThenProcessSession() = runTest {
+    fun createsManualRecordThenProcessSessionWithNeutralInitialProcessingState() = runTest {
         val repository = object : SessionRepository {
             override suspend fun createSession(session: MeetingSession): MeetingSession = session
             override fun observeSessions(): Flow<List<MeetingSession>> = flowOf(emptyList())
@@ -28,7 +29,8 @@ class CreateManualSessionUseCaseTest {
 
         assertEquals("Demo Meeting", result.title)
         assertEquals(ProcessingMode.RECORD_THEN_PROCESS, result.processingMode)
-        assertEquals(ProcessingTier.PRIMARY_LOCAL, result.processingTier)
+        assertEquals(ProcessingPolicy.LOCAL_ONLY, result.processingPolicy)
+        assertEquals(ProcessingTier.UNDECIDED, result.processingTier)
         assertEquals(SessionSource.MANUAL, result.source)
     }
 }
