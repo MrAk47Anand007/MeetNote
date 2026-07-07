@@ -22,6 +22,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":shared:core"))
     implementation(project(":shared:domain"))
     implementation(libs.kotlinx.coroutines.core)
 
