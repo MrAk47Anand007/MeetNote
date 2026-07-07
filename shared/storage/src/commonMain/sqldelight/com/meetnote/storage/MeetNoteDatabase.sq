@@ -30,6 +30,12 @@ UPDATE meeting_session
 SET status = ?
 WHERE id = ?;
 
+updateProcessingConfig:
+UPDATE meeting_session
+SET processing_policy = ?,
+    processing_tier = ?
+WHERE id = ?;
+
 attachAudioFile:
 UPDATE meeting_session
 SET audio_file_path = ?

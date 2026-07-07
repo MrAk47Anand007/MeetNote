@@ -56,6 +56,18 @@ class SqlDelightSessionRepository(
         )
     }
 
+    override suspend fun updateProcessingConfig(
+        sessionId: SessionId,
+        processingPolicy: ProcessingPolicy,
+        processingTier: ProcessingTier
+    ) {
+        storage.database.meetNoteDatabaseQueries.updateProcessingConfig(
+            processing_policy = processingPolicy.name,
+            processing_tier = processingTier.name,
+            id = sessionId.value
+        )
+    }
+
     override suspend fun attachAudioFile(sessionId: SessionId, audioFilePath: String) {
         storage.database.meetNoteDatabaseQueries.attachAudioFile(
             audio_file_path = audioFilePath,

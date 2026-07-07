@@ -21,6 +21,11 @@ class CreateManualSessionUseCaseTest {
             override suspend fun createSession(session: MeetingSession): MeetingSession = session
             override fun observeSessions(): Flow<List<MeetingSession>> = flowOf(emptyList())
             override suspend fun updateStatus(sessionId: SessionId, status: SessionStatus) = Unit
+            override suspend fun updateProcessingConfig(
+                sessionId: SessionId,
+                processingPolicy: ProcessingPolicy,
+                processingTier: ProcessingTier
+            ) = Unit
             override suspend fun attachAudioFile(sessionId: SessionId, audioFilePath: String) = Unit
         }
 
