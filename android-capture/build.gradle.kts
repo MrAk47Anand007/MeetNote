@@ -24,4 +24,6 @@ android {
 dependencies {
     implementation(project(":shared:domain"))
     implementation(libs.kotlinx.coroutines.core)
+
+    testImplementation(libs.junit4)
 }
