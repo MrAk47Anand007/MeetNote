@@ -1,0 +1,29 @@
+plugins {
+    alias(libs.plugins.android.library)
+    alias(libs.plugins.kotlin.android)
+}
+
+android {
+    namespace = "com.meetnote.android.background"
+    compileSdk = 35
+
+    defaultConfig {
+        minSdk = 29
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+}
+
+dependencies {
+    implementation(project(":android-capture"))
+    implementation(project(":shared:domain"))
+    implementation(libs.androidx.work.runtime)
+    implementation(libs.koin.android)
+}
