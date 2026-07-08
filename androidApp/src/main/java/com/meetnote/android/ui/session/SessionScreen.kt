@@ -6,7 +6,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
@@ -16,7 +19,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.meetnote.android.capture.CaptureSource
 import com.meetnote.android.capture.PlaybackCapturePermissionState
+import com.meetnote.shared.domain.model.MeetingSession
 import com.meetnote.shared.domain.model.ProcessingMode
+import com.meetnote.shared.domain.model.SessionStatus
 
 @Composable
 fun SessionScreen(
@@ -25,12 +30,15 @@ fun SessionScreen(
     onModeSelected: (ProcessingMode) -> Unit,
     onCaptureSourceSelected: (CaptureSource) -> Unit,
     onRequestPlaybackCaptureConsent: () -> Unit,
-    onCreateSession: () -> Unit
+    onCreateSession: () -> Unit,
+    onStartCapture: (String) -> Unit,
+    onStopCapture: (String) -> Unit
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
@@ -103,11 +111,37 @@ fun SessionScreen(
                 color = MaterialTheme.colorScheme.error
             )
         }
+        state.infoMessage?.let { infoMessage ->
+            Text(
+                text = infoMessage,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
         state.createdSessionId?.let { sessionId ->
             Text(
                 text = "Created session: $sessionId",
                 style = MaterialTheme.typography.bodyMedium
             )
+        }
+        Text(
+            text = "Session history",
+            style = MaterialTheme.typography.titleMedium
+        )
+        if (state.sessions.isEmpty()) {
+            Text(
+                text = "No sessions yet. Create one to start a demo capture flow.",
+                style = MaterialTheme.typography.bodyMedium
+            )
+        } else {
+            state.sessions.forEach { session ->
+                SessionHistoryCard(
+                    session = session,
+                    isActive = state.activeCaptureSessionId == session.id.value,
+                    onStartCapture = { onStartCapture(session.id.value) },
+                    onStopCapture = { onStopCapture(session.id.value) }
+                )
+            }
         }
     }
 }
@@ -154,4 +188,53 @@ private fun PlaybackCapturePermissionState.label(): String = when (this) {
     PlaybackCapturePermissionState.Granted -> "Granted"
     PlaybackCapturePermissionState.Denied -> "Denied"
     PlaybackCapturePermissionState.Unsupported -> "Unsupported"
+}
+
+@Composable
+private fun SessionHistoryCard(
+    session: MeetingSession,
+    isActive: Boolean,
+    onStartCapture: () -> Unit,
+    onStopCapture: () -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = session.title,
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = "Status: ${session.status.name}",
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Text(
+                text = "Mode: ${session.processingMode.name}",
+                style = MaterialTheme.typography.bodySmall
+            )
+            session.audioFilePath?.let { path ->
+                Text(
+                    text = "Audio file: $path",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            session.processingArtifactPath?.let { path ->
+                Text(
+                    text = "Processing artifact: $path",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            when {
+                isActive -> Button(onClick = onStopCapture) {
+                    Text("Stop Capture")
+                }
+
+                session.status != SessionStatus.CAPTURING -> Button(onClick = onStartCapture) {
+                    Text("Start Capture")
+                }
+            }
+        }
+    }
 }

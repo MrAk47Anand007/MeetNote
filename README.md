@@ -29,15 +29,16 @@ Implemented today:
 - manual session creation flow
 - capture source selection in the UI
 - MediaProjection playback-capture consent coordination shell
-- microphone recorder skeleton with persistence-safe start/stop behavior
-- foreground-service playback capture shell
-- playback-to-microphone fallback messaging
-- AI contract scaffolding for future transcription and summary engines
+- real microphone PCM capture with persistence-safe start/stop behavior
+- consent-backed playback PCM capture path
+- post-meeting WorkManager processing handoff
+- durable transcript artifact persistence
+- local transcription-engine seam with explicit unavailable-local fallback
 
 Not implemented yet:
 
-- full playback PCM capture pipeline
-- actual ASR runtime integration
+- physical-device validation across target meeting apps
+- actual bundled ASR runtime integration
 - LiteRT-LM or other on-device summary model integration
 - provider fallback onboarding
 - export pipelines for markdown, text, or PDF
@@ -69,10 +70,10 @@ MeetNote/
 |-- androidApp/           # Compose Android shell and Activity wiring
 |-- android-core/         # Android dependency graph and SQLDelight driver setup
 |-- android-capture/      # Recorder contracts and capture implementations
-|-- android-background/   # Foreground service and post-meeting orchestration shells
+|-- android-background/   # Foreground service and post-meeting orchestration
 |-- android-security/     # Secure storage/provider key abstractions
 |-- android-ai-local/     # Local AI runtime module scaffold
-|-- android-asr/          # Android ASR module scaffold
+|-- android-asr/          # Android ASR seam and local fallback implementation
 |-- shared/core/          # Core result and identifier types
 |-- shared/domain/        # Session models, policies, repository interfaces, use cases
 |-- shared/storage/       # SQLDelight storage and repository implementation
@@ -95,9 +96,10 @@ MeetNote/
 
 - `androidApp` renders the current session UI and permission flow
 - `android-core` wires Android-specific dependencies with Koin
-- `android-capture` owns capture contracts, mic recording, and playback-capture scaffolding
-- `android-background` hosts the foreground-service capture shell
-- `android-security`, `android-ai-local`, and `android-asr` are scaffolds for the next phases
+- `android-capture` owns capture contracts plus microphone and playback PCM recording
+- `android-background` hosts the foreground-service capture shell and transcript-artifact processing
+- `android-asr` currently exposes the transcription seam and a truthful local-unavailable fallback
+- `android-security` and `android-ai-local` remain scaffolds for the next phases
 
 ## Current User Flow
 
@@ -108,7 +110,8 @@ The app currently supports a thin but real shell for the main capture path:
 3. Choose `Playback Audio` or `Microphone`
 4. Request playback capture permission through MediaProjection
 5. Fall back to microphone capture if playback capture is denied or unsupported
-6. Persist session state locally for later processing work
+6. Persist session state locally and enqueue post-meeting processing for record-first sessions
+7. Write a durable transcript artifact that records either transcript output or why local transcription is unavailable
 
 ## Tech Stack
 
@@ -140,14 +143,15 @@ The app currently supports a thin but real shell for the main capture path:
 ```powershell
 .\gradlew.bat :androidApp:testDebugUnitTest
 .\gradlew.bat :android-capture:testDebugUnitTest
+.\gradlew.bat :android-background:testDebugUnitTest
 ```
 
 ### Useful Focused Checks
 
 ```powershell
 .\gradlew.bat :androidApp:testDebugUnitTest --tests com.meetnote.android.ui.session.SessionViewModelTest
-.\gradlew.bat :android-background:compileDebugKotlin
-.\gradlew.bat :android-capture:compileDebugKotlin
+.\gradlew.bat :android-background:testDebugUnitTest --tests com.meetnote.android.background.DefaultPostMeetingProcessingExecutorTest
+.\gradlew.bat :androidApp:compileDebugKotlin
 ```
 
 ## Known Constraints
@@ -165,7 +169,7 @@ Near-term priorities:
 
 - complete the playback audio recorder implementation
 - pass MediaProjection state safely into the foreground service runtime
-- add local ASR integration
+- replace the fallback transcription engine with a bundled local ASR runtime
 - add local summarization integration
 - add export formats and session history polish
 - add calendar and email meeting context ingestion

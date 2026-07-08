@@ -31,6 +31,8 @@ fun MeetNoteApp(
                 )
             }
         },
-        onCreateSession = viewModel::createSession
+        onCreateSession = viewModel::createSession,
+        onStartCapture = viewModel::startCapture,
+        onStopCapture = viewModel::stopCapture
     )
 }

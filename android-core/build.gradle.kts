@@ -22,6 +22,8 @@ android {
 }
 
 dependencies {
+    implementation(project(":android-asr"))
+    implementation(project(":android-capture"))
     implementation(project(":shared:domain"))
     implementation(project(":shared:storage"))
     implementation(libs.kotlinx.coroutines.core)

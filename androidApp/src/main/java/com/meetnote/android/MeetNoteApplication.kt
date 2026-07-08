@@ -1,6 +1,7 @@
 package com.meetnote.android
 
 import android.app.Application
+import com.meetnote.android.background.androidBackgroundModule
 import com.meetnote.android.core.appModules
 import com.meetnote.android.ui.session.androidUiModule
 import org.koin.android.ext.koin.androidContext
@@ -11,7 +12,7 @@ class MeetNoteApplication : Application() {
         super.onCreate()
         startKoin {
             androidContext(this@MeetNoteApplication)
-            modules(appModules + androidUiModule)
+            modules(appModules + androidBackgroundModule + androidUiModule)
         }
     }
 }

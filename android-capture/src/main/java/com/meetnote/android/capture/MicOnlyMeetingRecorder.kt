@@ -11,18 +11,21 @@ import kotlinx.coroutines.sync.withLock
 
 class MicOnlyMeetingRecorder internal constructor(
     private val sessionRepository: SessionRepository,
-    private val recordingFileFactory: (String) -> File
+    private val recordingFileFactory: (String) -> File,
+    private val audioCaptureSessionFactory: AudioCaptureSessionFactory
 ) : MeetingRecorder {
     constructor(
         context: Context,
         sessionRepository: SessionRepository
     ) : this(
         sessionRepository = sessionRepository,
-        recordingFileFactory = { sessionId -> File(context.filesDir, "$sessionId.raw") }
+        recordingFileFactory = { sessionId -> File(context.filesDir, "$sessionId.raw") },
+        audioCaptureSessionFactory = AudioCaptureSessionFactory { AndroidMicrophoneAudioCaptureSession() }
     )
 
     private val recorderMutex = Mutex()
     private val sessionState = RecorderSessionState()
+    private var activeAudioCaptureSession: AudioCaptureSession? = null
 
     override suspend fun start(sessionId: String): RecorderResult {
         return recorderMutex.withLock {
@@ -33,7 +36,14 @@ class MicOnlyMeetingRecorder internal constructor(
 
             val file = try {
                 recordingFileFactory(sessionId).apply {
-                    writeBytes(byteArrayOf())
+                    parentFile?.let { parent ->
+                        if (parent.exists() && !parent.isDirectory) {
+                            error("Parent path is not a directory")
+                        }
+                        if (!parent.exists() && !parent.mkdirs()) {
+                            error("Unable to create recording directory")
+                        }
+                    }
                 }
             } catch (exception: Exception) {
                 return@withLock RecorderResult.Failure(
@@ -41,16 +51,29 @@ class MicOnlyMeetingRecorder internal constructor(
                 )
             }
 
+            val audioCaptureSession = try {
+                audioCaptureSessionFactory.create().also { session ->
+                    session.start(file)
+                }
+            } catch (exception: Exception) {
+                return@withLock RecorderResult.Failure(
+                    "Failed to start microphone capture: ${exception.message ?: "unknown error"}"
+                )
+            }
+
             try {
                 sessionRepository.updateStatus(SessionId(sessionId), SessionStatus.CAPTURING)
             } catch (cancellation: CancellationException) {
+                audioCaptureSession.stop()
                 throw cancellation
             } catch (exception: Exception) {
+                audioCaptureSession.stop()
                 return@withLock RecorderResult.Failure(
                     "Failed to persist recording session: ${exception.message ?: "unknown error"}"
                 )
             }
 
+            activeAudioCaptureSession = audioCaptureSession
             sessionState.start(sessionId, file.absolutePath)
         }
     }
@@ -58,6 +81,7 @@ class MicOnlyMeetingRecorder internal constructor(
     override suspend fun stop(sessionId: String): RecorderResult {
         return recorderMutex.withLock {
             sessionState.stop(sessionId) { filePath ->
+                activeAudioCaptureSession?.stop()
                 val domainSessionId = SessionId(sessionId)
                 sessionRepository.attachAudioFile(domainSessionId, filePath)
                 try {
@@ -65,6 +89,7 @@ class MicOnlyMeetingRecorder internal constructor(
                 } catch (cancellation: CancellationException) {
                     throw cancellation
                 }
+                activeAudioCaptureSession = null
             }
         }
     }

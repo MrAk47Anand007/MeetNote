@@ -25,7 +25,8 @@ class SqlDelightSessionRepository(
             processing_policy = session.processingPolicy.name,
             processing_tier = session.processingTier.name,
             source = session.source.name,
-            audio_file_path = session.audioFilePath
+            audio_file_path = session.audioFilePath,
+            processing_artifact_path = session.processingArtifactPath
         )
         return session
     }
@@ -43,7 +44,8 @@ class SqlDelightSessionRepository(
                         processingPolicy = ProcessingPolicy.valueOf(row.processing_policy),
                         processingTier = ProcessingTier.valueOf(row.processing_tier),
                         source = SessionSource.valueOf(row.source),
-                        audioFilePath = row.audio_file_path
+                        audioFilePath = row.audio_file_path,
+                        processingArtifactPath = row.processing_artifact_path
                     )
                 }
             }
@@ -71,6 +73,13 @@ class SqlDelightSessionRepository(
     override suspend fun attachAudioFile(sessionId: SessionId, audioFilePath: String) {
         storage.database.meetNoteDatabaseQueries.attachAudioFile(
             audio_file_path = audioFilePath,
+            id = sessionId.value
+        )
+    }
+
+    override suspend fun attachProcessingArtifact(sessionId: SessionId, processingArtifactPath: String) {
+        storage.database.meetNoteDatabaseQueries.attachProcessingArtifact(
+            processing_artifact_path = processingArtifactPath,
             id = sessionId.value
         )
     }

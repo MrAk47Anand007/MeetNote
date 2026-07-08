@@ -17,4 +17,5 @@ interface SessionRepository {
         processingTier: ProcessingTier
     )
     suspend fun attachAudioFile(sessionId: SessionId, audioFilePath: String)
+    suspend fun attachProcessingArtifact(sessionId: SessionId, processingArtifactPath: String)
 }
