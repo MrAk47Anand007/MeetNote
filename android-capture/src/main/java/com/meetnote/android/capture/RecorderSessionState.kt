@@ -4,7 +4,14 @@ internal class RecorderSessionState {
     private var activeSessionId: String? = null
     private var activeFilePath: String? = null
 
-    fun start(sessionId: String, filePath: String): RecorderResult.Started {
+    fun currentSessionId(): String? = activeSessionId
+
+    fun start(sessionId: String, filePath: String): RecorderResult {
+        val currentSessionId = activeSessionId
+        if (currentSessionId != null) {
+            return RecorderResult.Failure("Recorder is active for session $currentSessionId")
+        }
+
         activeSessionId = sessionId
         activeFilePath = filePath
         return RecorderResult.Started(filePath)
@@ -18,9 +25,15 @@ internal class RecorderSessionState {
             return RecorderResult.Failure("Recorder is active for session $currentSessionId")
         }
 
-        onStopped(currentFilePath)
-        activeSessionId = null
-        activeFilePath = null
-        return RecorderResult.Stopped(currentFilePath)
+        return try {
+            onStopped(currentFilePath)
+            activeSessionId = null
+            activeFilePath = null
+            RecorderResult.Stopped(currentFilePath)
+        } catch (exception: Exception) {
+            RecorderResult.Failure(
+                "Failed to persist recording session: ${exception.message ?: "unknown error"}"
+            )
+        }
     }
 }

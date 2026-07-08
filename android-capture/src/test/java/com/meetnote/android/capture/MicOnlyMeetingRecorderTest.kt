@@ -18,7 +18,7 @@ import org.junit.Test
 class MicOnlyMeetingRecorderTest {
     @Test
     fun startUpdatesSessionStatusToCapturing() = runBlocking {
-        val repository = RecordingSessionRepository()
+        val repository = ConfigurableSessionRepository()
         val filesDir = Files.createTempDirectory("mic-recorder-start").toFile()
         val recorder = MicOnlyMeetingRecorder(repository) { sessionId ->
             File(filesDir, "$sessionId.raw")
@@ -35,7 +35,7 @@ class MicOnlyMeetingRecorderTest {
 
     @Test
     fun stopAttachesAudioAndUpdatesStatusToRecorded() = runBlocking {
-        val repository = RecordingSessionRepository()
+        val repository = ConfigurableSessionRepository()
         val filesDir = Files.createTempDirectory("mic-recorder-stop").toFile()
         val recorder = MicOnlyMeetingRecorder(repository) { sessionId ->
             File(filesDir, "$sessionId.raw")
@@ -61,8 +61,88 @@ class MicOnlyMeetingRecorderTest {
     }
 
     @Test
+    fun startReturnsFailureWhenRecordingIsAlreadyActive() = runBlocking {
+        val repository = ConfigurableSessionRepository()
+        val filesDir = Files.createTempDirectory("mic-recorder-overlap").toFile()
+        val recorder = MicOnlyMeetingRecorder(repository) { sessionId ->
+            File(filesDir, "$sessionId.raw")
+        }
+
+        val firstStart = recorder.start("session-a")
+        val overlappingStart = recorder.start("session-b")
+
+        assertTrue(firstStart is RecorderResult.Started)
+        assertEquals(
+            RecorderResult.Failure("Recorder is active for session session-a"),
+            overlappingStart
+        )
+        assertEquals(
+            listOf(SessionUpdate(SessionId("session-a"), SessionStatus.CAPTURING)),
+            repository.statusUpdates
+        )
+        assertTrue(recorder.stop("session-a") is RecorderResult.Stopped)
+    }
+
+    @Test
+    fun startReturnsFailureWhenSessionStatusCannotBePersisted() = runBlocking {
+        val repository = ConfigurableSessionRepository(updateStatusFailure = RuntimeException("boom"))
+        val filesDir = Files.createTempDirectory("mic-recorder-status-failure").toFile()
+        val recorder = MicOnlyMeetingRecorder(repository) { sessionId ->
+            File(filesDir, "$sessionId.raw")
+        }
+
+        val result = recorder.start("session-a")
+
+        assertEquals(
+            RecorderResult.Failure("Failed to persist recording session: boom"),
+            result
+        )
+        assertTrue(repository.statusUpdates.isEmpty())
+        assertTrue(repository.attachments.isEmpty())
+    }
+
+    @Test
+    fun stopReturnsFailureWhenRepositoryWriteFailsAndRetainsActiveSession() = runBlocking {
+        val repository = ConfigurableSessionRepository(attachAudioFileFailure = RuntimeException("attach failed"))
+        val filesDir = Files.createTempDirectory("mic-recorder-stop-failure").toFile()
+        val recorder = MicOnlyMeetingRecorder(repository) { sessionId ->
+            File(filesDir, "$sessionId.raw")
+        }
+
+        val startResult = recorder.start("session-a")
+        val failedStop = recorder.stop("session-a")
+
+        repository.attachAudioFileFailure = null
+
+        val successfulStop = recorder.stop("session-a")
+
+        assertTrue(startResult is RecorderResult.Started)
+        assertEquals(
+            RecorderResult.Failure("Failed to persist recording session: attach failed"),
+            failedStop
+        )
+        assertEquals(
+            RecorderResult.Stopped((startResult as RecorderResult.Started).filePath),
+            successfulStop
+        )
+        assertEquals(
+            listOf(
+                SessionUpdate(SessionId("session-a"), SessionStatus.CAPTURING),
+                SessionUpdate(SessionId("session-a"), SessionStatus.RECORDED)
+            ),
+            repository.statusUpdates
+        )
+        assertEquals(
+            listOf(
+                SessionAttachment(SessionId("session-a"), startResult.filePath)
+            ),
+            repository.attachments
+        )
+    }
+
+    @Test
     fun startReturnsFailureWhenRecordingFileCannotBePrepared() = runBlocking {
-        val repository = RecordingSessionRepository()
+        val repository = ConfigurableSessionRepository()
         val parentFile = File.createTempFile("mic-recorder-parent", ".tmp")
         val recorder = MicOnlyMeetingRecorder(repository) { sessionId ->
             File(parentFile, "$sessionId.raw")
@@ -76,7 +156,10 @@ class MicOnlyMeetingRecorderTest {
         assertTrue(repository.attachments.isEmpty())
     }
 
-    private class RecordingSessionRepository : SessionRepository {
+    private class ConfigurableSessionRepository(
+        var updateStatusFailure: RuntimeException? = null,
+        var attachAudioFileFailure: RuntimeException? = null
+    ) : SessionRepository {
         val statusUpdates = mutableListOf<SessionUpdate>()
         val attachments = mutableListOf<SessionAttachment>()
 
@@ -85,6 +168,7 @@ class MicOnlyMeetingRecorderTest {
         override fun observeSessions(): Flow<List<MeetingSession>> = emptyFlow()
 
         override suspend fun updateStatus(sessionId: SessionId, status: SessionStatus) {
+            updateStatusFailure?.let { throw it }
             statusUpdates += SessionUpdate(sessionId, status)
         }
 
@@ -95,6 +179,7 @@ class MicOnlyMeetingRecorderTest {
         ) = Unit
 
         override suspend fun attachAudioFile(sessionId: SessionId, audioFilePath: String) {
+            attachAudioFileFailure?.let { throw it }
             attachments += SessionAttachment(sessionId, audioFilePath)
         }
     }
