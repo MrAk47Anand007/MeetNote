@@ -33,7 +33,9 @@ android {
 }
 
 dependencies {
+    implementation(project(":android-background"))
     implementation(project(":android-core"))
+    implementation(project(":android-capture"))
     implementation(project(":shared:core"))
     implementation(project(":shared:domain"))
     implementation(platform(libs.androidx.compose.bom))

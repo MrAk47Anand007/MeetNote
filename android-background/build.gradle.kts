@@ -24,6 +24,7 @@ android {
 dependencies {
     implementation(project(":android-capture"))
     implementation(project(":shared:domain"))
+    implementation(project(":shared:core"))
     implementation(libs.androidx.work.runtime)
     implementation(libs.koin.android)
 }

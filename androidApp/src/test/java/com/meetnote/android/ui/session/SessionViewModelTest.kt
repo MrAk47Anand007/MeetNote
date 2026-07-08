@@ -1,5 +1,7 @@
 package com.meetnote.android.ui.session
 
+import com.meetnote.android.capture.CaptureSource
+import com.meetnote.android.capture.PlaybackCapturePermissionState
 import com.meetnote.shared.core.SessionId
 import com.meetnote.shared.domain.model.MeetingSession
 import com.meetnote.shared.domain.model.ProcessingMode
@@ -79,6 +81,52 @@ class SessionViewModelTest {
         )
         assertNull(viewModel.uiState.value.errorMessage)
         assertEquals(false, viewModel.uiState.value.isCreating)
+    }
+
+    @Test
+    fun updatesCaptureSourceToPlayback() = runTest(dispatcher) {
+        val repository = FakeSessionRepository()
+        val viewModel = createViewModel(repository)
+
+        viewModel.updateCaptureSource(CaptureSource.PLAYBACK_AUDIO)
+
+        assertEquals(CaptureSource.PLAYBACK_AUDIO, viewModel.uiState.value.captureSource)
+    }
+
+    @Test
+    fun storesPermissionDeniedState() = runTest(dispatcher) {
+        val repository = FakeSessionRepository()
+        val viewModel = createViewModel(repository)
+
+        viewModel.onPlaybackCapturePermissionChanged(PlaybackCapturePermissionState.Denied)
+
+        assertEquals(
+            PlaybackCapturePermissionState.Denied,
+            viewModel.uiState.value.playbackPermissionState
+        )
+    }
+
+    @Test
+    fun marksPermissionRequestingBeforeLaunch() = runTest(dispatcher) {
+        val repository = FakeSessionRepository()
+        val viewModel = createViewModel(repository)
+
+        viewModel.requestPlaybackCaptureConsent()
+
+        assertEquals(
+            PlaybackCapturePermissionState.Requesting,
+            viewModel.uiState.value.playbackPermissionState
+        )
+    }
+
+    @Test
+    fun switchesToMicWhenPlaybackDenied() = runTest(dispatcher) {
+        val repository = FakeSessionRepository()
+        val viewModel = createViewModel(repository)
+
+        viewModel.onPlaybackCapturePermissionChanged(PlaybackCapturePermissionState.Denied)
+
+        assertEquals(CaptureSource.MICROPHONE, viewModel.uiState.value.captureSource)
     }
 
     private fun createViewModel(repository: FakeSessionRepository): SessionViewModel =
