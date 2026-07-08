@@ -1,5 +1,7 @@
 package com.meetnote.android.capture
 
+import kotlinx.coroutines.CancellationException
+
 internal class RecorderSessionState {
     private var activeSessionId: String? = null
     private var activeFilePath: String? = null
@@ -30,6 +32,8 @@ internal class RecorderSessionState {
             activeSessionId = null
             activeFilePath = null
             RecorderResult.Stopped(currentFilePath)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
         } catch (exception: Exception) {
             RecorderResult.Failure(
                 "Failed to persist recording session: ${exception.message ?: "unknown error"}"

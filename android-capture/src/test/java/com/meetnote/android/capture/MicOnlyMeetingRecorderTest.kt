@@ -8,6 +8,7 @@ import com.meetnote.shared.domain.model.SessionStatus
 import com.meetnote.shared.domain.repository.SessionRepository
 import java.io.File
 import java.nio.file.Files
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.runBlocking
@@ -102,6 +103,22 @@ class MicOnlyMeetingRecorderTest {
     }
 
     @Test
+    fun startPropagatesCancellationFromSessionStatusPersistence() = runBlocking {
+        val repository = ConfigurableSessionRepository(updateStatusFailure = CancellationException("cancelled"))
+        val filesDir = Files.createTempDirectory("mic-recorder-cancel-start").toFile()
+        val recorder = MicOnlyMeetingRecorder(repository) { sessionId ->
+            File(filesDir, "$sessionId.raw")
+        }
+
+        try {
+            recorder.start("session-a")
+            throw AssertionError("Expected CancellationException")
+        } catch (exception: CancellationException) {
+            assertEquals("cancelled", exception.message)
+        }
+    }
+
+    @Test
     fun stopReturnsFailureWhenRepositoryWriteFailsAndRetainsActiveSession() = runBlocking {
         val repository = ConfigurableSessionRepository(attachAudioFileFailure = RuntimeException("attach failed"))
         val filesDir = Files.createTempDirectory("mic-recorder-stop-failure").toFile()
@@ -138,6 +155,24 @@ class MicOnlyMeetingRecorderTest {
             ),
             repository.attachments
         )
+    }
+
+    @Test
+    fun stopPropagatesCancellationFromRepositoryWrites() = runBlocking {
+        val repository = ConfigurableSessionRepository(attachAudioFileFailure = CancellationException("cancelled"))
+        val filesDir = Files.createTempDirectory("mic-recorder-cancel-stop").toFile()
+        val recorder = MicOnlyMeetingRecorder(repository) { sessionId ->
+            File(filesDir, "$sessionId.raw")
+        }
+
+        recorder.start("session-a")
+
+        try {
+            recorder.stop("session-a")
+            throw AssertionError("Expected CancellationException")
+        } catch (exception: CancellationException) {
+            assertEquals("cancelled", exception.message)
+        }
     }
 
     @Test

@@ -5,6 +5,7 @@ import com.meetnote.shared.core.SessionId
 import com.meetnote.shared.domain.model.SessionStatus
 import com.meetnote.shared.domain.repository.SessionRepository
 import java.io.File
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -42,6 +43,8 @@ class MicOnlyMeetingRecorder internal constructor(
 
             try {
                 sessionRepository.updateStatus(SessionId(sessionId), SessionStatus.CAPTURING)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
             } catch (exception: Exception) {
                 return@withLock RecorderResult.Failure(
                     "Failed to persist recording session: ${exception.message ?: "unknown error"}"
@@ -57,7 +60,11 @@ class MicOnlyMeetingRecorder internal constructor(
             sessionState.stop(sessionId) { filePath ->
                 val domainSessionId = SessionId(sessionId)
                 sessionRepository.attachAudioFile(domainSessionId, filePath)
-                sessionRepository.updateStatus(domainSessionId, SessionStatus.RECORDED)
+                try {
+                    sessionRepository.updateStatus(domainSessionId, SessionStatus.RECORDED)
+                } catch (cancellation: CancellationException) {
+                    throw cancellation
+                }
             }
         }
     }
