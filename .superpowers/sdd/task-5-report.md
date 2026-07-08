@@ -58,3 +58,30 @@ Tests added or updated:
 
 Notes:
 - The build still prints the pre-existing Kotlin/AGP compatibility warning from the workspace, but it does not block compilation or tests.
+
+Fifth fix pass:
+- Added explicit stop-path coverage for the branch where `stop(sessionId)` reaches `SessionRepository.attachAudioFile(...)` successfully and then `SessionRepository.updateStatus(..., SessionStatus.RECORDED)` fails.
+- Added a matching cancellation test for the same branch so coroutine cancellation is still propagated after the attachment write has succeeded.
+- Kept the implementation unchanged; the fix pass was limited to test coverage and the task report only.
+
+Verification:
+- `.\gradlew.bat :android-capture:compileDebugKotlin` passed
+- `.\gradlew.bat :android-capture:testDebugUnitTest` passed
+
+Tests updated:
+- `android-capture/src/test/java/com/meetnote/android/capture/MicOnlyMeetingRecorderTest.kt`
+- Added explicit coverage for `RECORDED` status failure after attachment and `CancellationException` propagation after attachment
+
+Fourth fix pass:
+- Added explicit `CancellationException` passthrough around the suspend repository calls in `MicOnlyMeetingRecorder.start(sessionId)` and the `stop(sessionId)` persistence path so coroutine cancellation is no longer converted into `RecorderResult.Failure`.
+- Kept the existing failure mapping for real repository/storage problems intact, including start-status persistence failures and stop attachment/status write failures.
+- Preserved the earlier Task 5 behavior that was already verified: overlapping start protection, session-identity checks, state clearing after successful stop, repository persistence, and graceful file-preparation failure.
+- Kept the scope inside `android-capture` only; no app/background wiring was added.
+
+Verification:
+- `.\gradlew.bat :android-capture:compileDebugKotlin` passed
+- `.\gradlew.bat :android-capture:testDebugUnitTest` passed
+
+Tests updated:
+- `android-capture/src/test/java/com/meetnote/android/capture/MicOnlyMeetingRecorderTest.kt`
+- Added cancellation propagation coverage for `start()` and `stop()` alongside the existing failure-mapping tests

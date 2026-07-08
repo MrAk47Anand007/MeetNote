@@ -86,7 +86,11 @@ class MicOnlyMeetingRecorderTest {
 
     @Test
     fun startReturnsFailureWhenSessionStatusCannotBePersisted() = runBlocking {
-        val repository = ConfigurableSessionRepository(updateStatusFailure = RuntimeException("boom"))
+        val repository = ConfigurableSessionRepository(
+            updateStatusFailure = { status ->
+                if (status == SessionStatus.CAPTURING) RuntimeException("boom") else null
+            }
+        )
         val filesDir = Files.createTempDirectory("mic-recorder-status-failure").toFile()
         val recorder = MicOnlyMeetingRecorder(repository) { sessionId ->
             File(filesDir, "$sessionId.raw")
@@ -104,7 +108,11 @@ class MicOnlyMeetingRecorderTest {
 
     @Test
     fun startPropagatesCancellationFromSessionStatusPersistence() = runBlocking {
-        val repository = ConfigurableSessionRepository(updateStatusFailure = CancellationException("cancelled"))
+        val repository = ConfigurableSessionRepository(
+            updateStatusFailure = { status ->
+                if (status == SessionStatus.CAPTURING) CancellationException("cancelled") else null
+            }
+        )
         val filesDir = Files.createTempDirectory("mic-recorder-cancel-start").toFile()
         val recorder = MicOnlyMeetingRecorder(repository) { sessionId ->
             File(filesDir, "$sessionId.raw")
@@ -158,6 +166,66 @@ class MicOnlyMeetingRecorderTest {
     }
 
     @Test
+    fun stopReturnsFailureWhenRecordedStatusCannotBePersistedAfterAttachment() = runBlocking {
+        val repository = ConfigurableSessionRepository(
+            updateStatusFailure = { status ->
+                if (status == SessionStatus.RECORDED) RuntimeException("recorded failed") else null
+            }
+        )
+        val filesDir = Files.createTempDirectory("mic-recorder-recorded-status-failure").toFile()
+        val recorder = MicOnlyMeetingRecorder(repository) { sessionId ->
+            File(filesDir, "$sessionId.raw")
+        }
+
+        val startResult = recorder.start("session-a") as RecorderResult.Started
+        val failedStop = recorder.stop("session-a")
+
+        assertEquals(
+            RecorderResult.Failure("Failed to persist recording session: recorded failed"),
+            failedStop
+        )
+        assertEquals(
+            listOf(SessionAttachment(SessionId("session-a"), startResult.filePath)),
+            repository.attachments
+        )
+        assertEquals(
+            listOf(SessionUpdate(SessionId("session-a"), SessionStatus.CAPTURING)),
+            repository.statusUpdates
+        )
+    }
+
+    @Test
+    fun stopPropagatesCancellationWhenRecordedStatusCannotBePersistedAfterAttachment() = runBlocking {
+        val repository = ConfigurableSessionRepository(
+            updateStatusFailure = { status ->
+                if (status == SessionStatus.RECORDED) CancellationException("cancelled") else null
+            }
+        )
+        val filesDir = Files.createTempDirectory("mic-recorder-recorded-status-cancel").toFile()
+        val recorder = MicOnlyMeetingRecorder(repository) { sessionId ->
+            File(filesDir, "$sessionId.raw")
+        }
+
+        val startResult = recorder.start("session-a") as RecorderResult.Started
+
+        try {
+            recorder.stop("session-a")
+            throw AssertionError("Expected CancellationException")
+        } catch (exception: CancellationException) {
+            assertEquals("cancelled", exception.message)
+        }
+
+        assertEquals(
+            listOf(SessionAttachment(SessionId("session-a"), startResult.filePath)),
+            repository.attachments
+        )
+        assertEquals(
+            listOf(SessionUpdate(SessionId("session-a"), SessionStatus.CAPTURING)),
+            repository.statusUpdates
+        )
+    }
+
+    @Test
     fun stopPropagatesCancellationFromRepositoryWrites() = runBlocking {
         val repository = ConfigurableSessionRepository(attachAudioFileFailure = CancellationException("cancelled"))
         val filesDir = Files.createTempDirectory("mic-recorder-cancel-stop").toFile()
@@ -192,8 +260,8 @@ class MicOnlyMeetingRecorderTest {
     }
 
     private class ConfigurableSessionRepository(
-        var updateStatusFailure: RuntimeException? = null,
-        var attachAudioFileFailure: RuntimeException? = null
+        var updateStatusFailure: ((SessionStatus) -> Throwable?)? = null,
+        var attachAudioFileFailure: Throwable? = null
     ) : SessionRepository {
         val statusUpdates = mutableListOf<SessionUpdate>()
         val attachments = mutableListOf<SessionAttachment>()
@@ -203,7 +271,7 @@ class MicOnlyMeetingRecorderTest {
         override fun observeSessions(): Flow<List<MeetingSession>> = emptyFlow()
 
         override suspend fun updateStatus(sessionId: SessionId, status: SessionStatus) {
-            updateStatusFailure?.let { throw it }
+            updateStatusFailure?.invoke(status)?.let { throw it }
             statusUpdates += SessionUpdate(sessionId, status)
         }
 
