@@ -180,16 +180,26 @@ class MicOnlyMeetingRecorderTest {
         val startResult = recorder.start("session-a") as RecorderResult.Started
         val failedStop = recorder.stop("session-a")
 
+        repository.updateStatusFailure = null
+        val successfulStop = recorder.stop("session-a")
+
         assertEquals(
             RecorderResult.Failure("Failed to persist recording session: recorded failed"),
             failedStop
         )
+        assertEquals(RecorderResult.Stopped(startResult.filePath), successfulStop)
         assertEquals(
-            listOf(SessionAttachment(SessionId("session-a"), startResult.filePath)),
+            listOf(
+                SessionAttachment(SessionId("session-a"), startResult.filePath),
+                SessionAttachment(SessionId("session-a"), startResult.filePath)
+            ),
             repository.attachments
         )
         assertEquals(
-            listOf(SessionUpdate(SessionId("session-a"), SessionStatus.CAPTURING)),
+            listOf(
+                SessionUpdate(SessionId("session-a"), SessionStatus.CAPTURING),
+                SessionUpdate(SessionId("session-a"), SessionStatus.RECORDED)
+            ),
             repository.statusUpdates
         )
     }
@@ -215,12 +225,22 @@ class MicOnlyMeetingRecorderTest {
             assertEquals("cancelled", exception.message)
         }
 
+        repository.updateStatusFailure = null
+        val successfulStop = recorder.stop("session-a")
+
+        assertEquals(RecorderResult.Stopped(startResult.filePath), successfulStop)
         assertEquals(
-            listOf(SessionAttachment(SessionId("session-a"), startResult.filePath)),
+            listOf(
+                SessionAttachment(SessionId("session-a"), startResult.filePath),
+                SessionAttachment(SessionId("session-a"), startResult.filePath)
+            ),
             repository.attachments
         )
         assertEquals(
-            listOf(SessionUpdate(SessionId("session-a"), SessionStatus.CAPTURING)),
+            listOf(
+                SessionUpdate(SessionId("session-a"), SessionStatus.CAPTURING),
+                SessionUpdate(SessionId("session-a"), SessionStatus.RECORDED)
+            ),
             repository.statusUpdates
         )
     }
