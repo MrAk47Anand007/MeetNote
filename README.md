@@ -34,6 +34,7 @@ Implemented today:
 - post-meeting WorkManager processing handoff
 - durable transcript artifact persistence
 - local transcription-engine seam with explicit unavailable-local fallback
+- persisted per-session failure messages surfaced in the Android UI
 
 Not implemented yet:
 

@@ -56,6 +56,7 @@ class DefaultPostMeetingProcessingExecutorTest {
         assertTrue(artifactContents.contains("status=transcription_unavailable_locally"))
         assertTrue(artifactContents.contains("message=No local model is installed."))
         assertEquals(listOf(audioFile.absolutePath), transcriptionEngine.requestedAudioPaths)
+        assertEquals(listOf(ProcessingErrorUpdate(SessionId(sessionId), null)), repository.processingErrors)
     }
 
     @Test
@@ -86,9 +87,42 @@ class DefaultPostMeetingProcessingExecutorTest {
         assertTrue(artifactContents.contains("Hello from the meeting transcript."))
     }
 
+    @Test
+    fun processPersistsFailureReasonWhenExecutorThrows() = runBlocking {
+        val repository = FakeSessionRepository()
+        val result = DefaultPostMeetingProcessingExecutor(
+            sessionRepository = repository,
+            transcriptionEngine = FakeTranscriptionEngine(result = AiProcessingResult.Deferred(AiProcessingContext())),
+            artifactFileFactory = { error("artifact creation failed") }
+        ).process("session-c", "missing.raw")
+
+        assertEquals(androidx.work.ListenableWorker.Result.failure()::class, result::class)
+        assertEquals(
+            listOf(
+                SessionUpdate(SessionId("session-c"), SessionStatus.PROCESSING),
+                SessionUpdate(SessionId("session-c"), SessionStatus.FAILED)
+            ),
+            repository.statusUpdates
+        )
+        assertEquals(
+            listOf(
+                ProcessingErrorUpdate(
+                    sessionId = SessionId("session-c"),
+                    lastErrorMessage = null
+                ),
+                ProcessingErrorUpdate(
+                    sessionId = SessionId("session-c"),
+                    lastErrorMessage = "Post-meeting processing failed: artifact creation failed"
+                )
+            ),
+            repository.processingErrors
+        )
+    }
+
     private class FakeSessionRepository : SessionRepository {
         val statusUpdates = mutableListOf<SessionUpdate>()
         val processingArtifacts = mutableListOf<ProcessingArtifactUpdate>()
+        val processingErrors = mutableListOf<ProcessingErrorUpdate>()
 
         override suspend fun createSession(session: MeetingSession): MeetingSession = session
 
@@ -109,6 +143,10 @@ class DefaultPostMeetingProcessingExecutorTest {
         override suspend fun attachProcessingArtifact(sessionId: SessionId, processingArtifactPath: String) {
             processingArtifacts += ProcessingArtifactUpdate(sessionId, processingArtifactPath)
         }
+
+        override suspend fun updateLastError(sessionId: SessionId, lastErrorMessage: String?) {
+            processingErrors += ProcessingErrorUpdate(sessionId, lastErrorMessage)
+        }
     }
 
     private data class SessionUpdate(
@@ -119,6 +157,11 @@ class DefaultPostMeetingProcessingExecutorTest {
     private data class ProcessingArtifactUpdate(
         val sessionId: SessionId,
         val processingArtifactPath: String
+    )
+
+    private data class ProcessingErrorUpdate(
+        val sessionId: SessionId,
+        val lastErrorMessage: String?
     )
 
     private class FakeTranscriptionEngine(

@@ -87,6 +87,7 @@ class DefaultPostMeetingProcessingExecutor(
         val domainSessionId = SessionId(sessionId)
         return try {
             sessionRepository.updateStatus(domainSessionId, SessionStatus.PROCESSING)
+            bestEffortUpdateLastError(domainSessionId, null)
 
             val transcriptionResult = transcriptionEngine.transcribe(
                 TranscriptionRequest(audioPath = audioFilePath)
@@ -99,8 +100,12 @@ class DefaultPostMeetingProcessingExecutor(
             sessionRepository.attachProcessingArtifact(domainSessionId, artifactFile.absolutePath)
             sessionRepository.updateStatus(domainSessionId, SessionStatus.COMPLETED)
             androidx.work.ListenableWorker.Result.success()
-        } catch (_: Exception) {
+        } catch (exception: Exception) {
             sessionRepository.updateStatus(domainSessionId, SessionStatus.FAILED)
+            bestEffortUpdateLastError(
+                domainSessionId,
+                "Post-meeting processing failed: ${exception.message ?: "unknown error"}"
+            )
             androidx.work.ListenableWorker.Result.failure()
         }
     }
@@ -140,6 +145,13 @@ class DefaultPostMeetingProcessingExecutor(
                 appendLine("provider_processing_approved=${transcriptionResult.processingContext.providerProcessingApproved}")
                 appendLine("message=${transcriptionResult.message ?: "No local transcription runtime is available."}")
             }
+        }
+    }
+
+    private suspend fun bestEffortUpdateLastError(sessionId: SessionId, message: String?) {
+        try {
+            sessionRepository.updateLastError(sessionId, message)
+        } catch (_: Exception) {
         }
     }
 }

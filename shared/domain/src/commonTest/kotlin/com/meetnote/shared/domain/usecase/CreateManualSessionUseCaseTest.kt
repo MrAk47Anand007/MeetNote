@@ -27,6 +27,8 @@ class CreateManualSessionUseCaseTest {
                 processingTier: ProcessingTier
             ) = Unit
             override suspend fun attachAudioFile(sessionId: SessionId, audioFilePath: String) = Unit
+            override suspend fun attachProcessingArtifact(sessionId: SessionId, processingArtifactPath: String) = Unit
+            override suspend fun updateLastError(sessionId: SessionId, lastErrorMessage: String?) = Unit
         }
 
         val useCase = CreateManualSessionUseCase(repository)

@@ -11,7 +11,8 @@ data class MeetingSession(
     val processingTier: ProcessingTier,
     val source: SessionSource,
     val audioFilePath: String? = null,
-    val processingArtifactPath: String? = null
+    val processingArtifactPath: String? = null,
+    val lastErrorMessage: String? = null
 )
 
 enum class SessionStatus {

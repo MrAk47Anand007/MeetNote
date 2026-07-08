@@ -37,6 +37,14 @@ class PlaybackAudioRecorderTest {
             result
         )
         assertTrue(repository.statusUpdates.isEmpty())
+        assertEquals(
+            listOf(SessionUpdate(SessionId("session-a"), SessionStatus.FAILED)),
+            repository.failedStatusUpdates
+        )
+        assertEquals(
+            listOf(SessionError(SessionId("session-a"), "Playback capture permission is not available for this session")),
+            repository.lastErrors
+        )
     }
 
     @Test
@@ -134,14 +142,20 @@ class PlaybackAudioRecorderTest {
 
     private class ConfigurableSessionRepository : SessionRepository {
         val statusUpdates = mutableListOf<SessionUpdate>()
+        val failedStatusUpdates = mutableListOf<SessionUpdate>()
         val attachments = mutableListOf<SessionAttachment>()
+        val lastErrors = mutableListOf<SessionError>()
 
         override suspend fun createSession(session: MeetingSession): MeetingSession = session
 
         override fun observeSessions(): Flow<List<MeetingSession>> = emptyFlow()
 
         override suspend fun updateStatus(sessionId: SessionId, status: SessionStatus) {
-            statusUpdates += SessionUpdate(sessionId, status)
+            if (status == SessionStatus.FAILED) {
+                failedStatusUpdates += SessionUpdate(sessionId, status)
+            } else {
+                statusUpdates += SessionUpdate(sessionId, status)
+            }
         }
 
         override suspend fun updateProcessingConfig(
@@ -155,6 +169,10 @@ class PlaybackAudioRecorderTest {
         }
 
         override suspend fun attachProcessingArtifact(sessionId: SessionId, processingArtifactPath: String) = Unit
+
+        override suspend fun updateLastError(sessionId: SessionId, lastErrorMessage: String?) {
+            lastErrors += SessionError(sessionId, lastErrorMessage)
+        }
     }
 
     private data class SessionUpdate(
@@ -165,5 +183,10 @@ class PlaybackAudioRecorderTest {
     private data class SessionAttachment(
         val sessionId: SessionId,
         val audioFilePath: String
+    )
+
+    private data class SessionError(
+        val sessionId: SessionId,
+        val lastErrorMessage: String?
     )
 }

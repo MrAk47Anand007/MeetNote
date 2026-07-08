@@ -333,6 +333,14 @@ class MicOnlyMeetingRecorderTest {
             result
         )
         assertTrue(repository.statusUpdates.isEmpty())
+        assertEquals(
+            listOf(SessionUpdate(SessionId("session-a"), SessionStatus.FAILED)),
+            repository.statusUpdatesOnFailure
+        )
+        assertEquals(
+            listOf(SessionError(SessionId("session-a"), "Failed to start microphone capture: mic unavailable")),
+            repository.lastErrors
+        )
     }
 
     private class ConfigurableSessionRepository(
@@ -340,7 +348,9 @@ class MicOnlyMeetingRecorderTest {
         var attachAudioFileFailure: Throwable? = null
     ) : SessionRepository {
         val statusUpdates = mutableListOf<SessionUpdate>()
+        val statusUpdatesOnFailure = mutableListOf<SessionUpdate>()
         val attachments = mutableListOf<SessionAttachment>()
+        val lastErrors = mutableListOf<SessionError>()
 
         override suspend fun createSession(session: MeetingSession): MeetingSession = session
 
@@ -348,7 +358,11 @@ class MicOnlyMeetingRecorderTest {
 
         override suspend fun updateStatus(sessionId: SessionId, status: SessionStatus) {
             updateStatusFailure?.invoke(status)?.let { throw it }
-            statusUpdates += SessionUpdate(sessionId, status)
+            if (status == SessionStatus.FAILED) {
+                statusUpdatesOnFailure += SessionUpdate(sessionId, status)
+            } else {
+                statusUpdates += SessionUpdate(sessionId, status)
+            }
         }
 
         override suspend fun updateProcessingConfig(
@@ -363,6 +377,10 @@ class MicOnlyMeetingRecorderTest {
         }
 
         override suspend fun attachProcessingArtifact(sessionId: SessionId, processingArtifactPath: String) = Unit
+
+        override suspend fun updateLastError(sessionId: SessionId, lastErrorMessage: String?) {
+            lastErrors += SessionError(sessionId, lastErrorMessage)
+        }
     }
 
     private data class SessionUpdate(
@@ -373,6 +391,11 @@ class MicOnlyMeetingRecorderTest {
     private data class SessionAttachment(
         val sessionId: SessionId,
         val audioFilePath: String
+    )
+
+    private data class SessionError(
+        val sessionId: SessionId,
+        val lastErrorMessage: String?
     )
 
     private class FakeAudioCaptureSession(

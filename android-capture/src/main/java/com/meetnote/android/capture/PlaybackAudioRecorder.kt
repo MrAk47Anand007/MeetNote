@@ -10,6 +10,8 @@ import android.media.MediaRecorder
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Build
+import com.meetnote.shared.core.SessionId
+import com.meetnote.shared.domain.model.SessionStatus
 import com.meetnote.shared.domain.repository.SessionRepository
 import java.io.File
 import java.io.FileOutputStream
@@ -54,8 +56,9 @@ class PlaybackAudioRecorder internal constructor(
 
             val support = PlaybackCaptureSupport.forSdk(sdkIntProvider())
             if (!support.isPlaybackCaptureSupported) {
-                return@withLock RecorderResult.Failure(
-                    support.failureReason ?: "Playback capture is not supported on this device"
+                return@withLock sessionFailure(
+                    sessionId = sessionId,
+                    message = support.failureReason ?: "Playback capture is not supported on this device"
                 )
             }
 
@@ -71,14 +74,16 @@ class PlaybackAudioRecorder internal constructor(
                     }
                 }
             } catch (exception: Exception) {
-                return@withLock RecorderResult.Failure(
-                    "Failed to prepare recording file: ${exception.message ?: "unknown error"}"
+                return@withLock sessionFailure(
+                    sessionId = sessionId,
+                    message = "Failed to prepare recording file: ${exception.message ?: "unknown error"}"
                 )
             }
 
             val permissionIntent = authorizationStore.consume(sessionId)
-                ?: return@withLock RecorderResult.Failure(
-                    "Playback capture permission is not available for this session"
+                ?: return@withLock sessionFailure(
+                    sessionId = sessionId,
+                    message = "Playback capture permission is not available for this session"
                 )
 
             val captureSession = try {
@@ -86,20 +91,23 @@ class PlaybackAudioRecorder internal constructor(
                     session.start(permissionIntent, file)
                 }
             } catch (exception: Exception) {
-                return@withLock RecorderResult.Failure(
-                    "Failed to start playback capture: ${exception.message ?: "unknown error"}"
+                return@withLock sessionFailure(
+                    sessionId = sessionId,
+                    message = "Failed to start playback capture: ${exception.message ?: "unknown error"}"
                 )
             }
 
             try {
-                sessionRepository.updateStatus(com.meetnote.shared.core.SessionId(sessionId), com.meetnote.shared.domain.model.SessionStatus.CAPTURING)
+                sessionRepository.updateStatus(SessionId(sessionId), SessionStatus.CAPTURING)
+                bestEffortUpdateLastError(SessionId(sessionId), null)
             } catch (cancellation: CancellationException) {
                 captureSession.stop()
                 throw cancellation
             } catch (exception: Exception) {
                 captureSession.stop()
-                return@withLock RecorderResult.Failure(
-                    "Failed to persist recording session: ${exception.message ?: "unknown error"}"
+                return@withLock sessionFailure(
+                    sessionId = sessionId,
+                    message = "Failed to persist recording session: ${exception.message ?: "unknown error"}"
                 )
             }
 
@@ -112,15 +120,47 @@ class PlaybackAudioRecorder internal constructor(
         return recorderMutex.withLock {
             sessionState.stop(sessionId) { filePath ->
                 activeCaptureSession?.stop()
-                val domainSessionId = com.meetnote.shared.core.SessionId(sessionId)
+                val domainSessionId = SessionId(sessionId)
                 sessionRepository.attachAudioFile(domainSessionId, filePath)
                 try {
-                    sessionRepository.updateStatus(domainSessionId, com.meetnote.shared.domain.model.SessionStatus.RECORDED)
+                    sessionRepository.updateStatus(domainSessionId, SessionStatus.RECORDED)
+                    bestEffortUpdateLastError(domainSessionId, null)
                 } catch (cancellation: CancellationException) {
                     throw cancellation
+                } catch (exception: Exception) {
+                    bestEffortUpdateLastError(
+                        domainSessionId,
+                        "Failed to persist recording session: ${exception.message ?: "unknown error"}"
+                    )
+                    throw exception
                 }
                 activeCaptureSession = null
             }
+        }
+    }
+
+    private suspend fun sessionFailure(sessionId: String, message: String): RecorderResult {
+        val domainSessionId = SessionId(sessionId)
+        bestEffortUpdateStatus(domainSessionId, SessionStatus.FAILED)
+        bestEffortUpdateLastError(domainSessionId, message)
+        return RecorderResult.Failure(message)
+    }
+
+    private suspend fun bestEffortUpdateStatus(sessionId: SessionId, status: SessionStatus) {
+        try {
+            sessionRepository.updateStatus(sessionId, status)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Exception) {
+        }
+    }
+
+    private suspend fun bestEffortUpdateLastError(sessionId: SessionId, message: String?) {
+        try {
+            sessionRepository.updateLastError(sessionId, message)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Exception) {
         }
     }
 }

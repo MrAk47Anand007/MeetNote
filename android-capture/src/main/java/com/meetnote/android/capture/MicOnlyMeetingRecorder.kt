@@ -46,8 +46,9 @@ class MicOnlyMeetingRecorder internal constructor(
                     }
                 }
             } catch (exception: Exception) {
-                return@withLock RecorderResult.Failure(
-                    "Failed to prepare recording file: ${exception.message ?: "unknown error"}"
+                return@withLock sessionFailure(
+                    sessionId = sessionId,
+                    message = "Failed to prepare recording file: ${exception.message ?: "unknown error"}"
                 )
             }
 
@@ -56,20 +57,23 @@ class MicOnlyMeetingRecorder internal constructor(
                     session.start(file)
                 }
             } catch (exception: Exception) {
-                return@withLock RecorderResult.Failure(
-                    "Failed to start microphone capture: ${exception.message ?: "unknown error"}"
+                return@withLock sessionFailure(
+                    sessionId = sessionId,
+                    message = "Failed to start microphone capture: ${exception.message ?: "unknown error"}"
                 )
             }
 
             try {
                 sessionRepository.updateStatus(SessionId(sessionId), SessionStatus.CAPTURING)
+                bestEffortUpdateLastError(SessionId(sessionId), null)
             } catch (cancellation: CancellationException) {
                 audioCaptureSession.stop()
                 throw cancellation
             } catch (exception: Exception) {
                 audioCaptureSession.stop()
-                return@withLock RecorderResult.Failure(
-                    "Failed to persist recording session: ${exception.message ?: "unknown error"}"
+                return@withLock sessionFailure(
+                    sessionId = sessionId,
+                    message = "Failed to persist recording session: ${exception.message ?: "unknown error"}"
                 )
             }
 
@@ -86,11 +90,43 @@ class MicOnlyMeetingRecorder internal constructor(
                 sessionRepository.attachAudioFile(domainSessionId, filePath)
                 try {
                     sessionRepository.updateStatus(domainSessionId, SessionStatus.RECORDED)
+                    bestEffortUpdateLastError(domainSessionId, null)
                 } catch (cancellation: CancellationException) {
                     throw cancellation
+                } catch (exception: Exception) {
+                    bestEffortUpdateLastError(
+                        domainSessionId,
+                        "Failed to persist recording session: ${exception.message ?: "unknown error"}"
+                    )
+                    throw exception
                 }
                 activeAudioCaptureSession = null
             }
+        }
+    }
+
+    private suspend fun sessionFailure(sessionId: String, message: String): RecorderResult {
+        val domainSessionId = SessionId(sessionId)
+        bestEffortUpdateStatus(domainSessionId, SessionStatus.FAILED)
+        bestEffortUpdateLastError(domainSessionId, message)
+        return RecorderResult.Failure(message)
+    }
+
+    private suspend fun bestEffortUpdateStatus(sessionId: SessionId, status: SessionStatus) {
+        try {
+            sessionRepository.updateStatus(sessionId, status)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Exception) {
+        }
+    }
+
+    private suspend fun bestEffortUpdateLastError(sessionId: SessionId, message: String?) {
+        try {
+            sessionRepository.updateLastError(sessionId, message)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Exception) {
         }
     }
 }

@@ -7,7 +7,8 @@ CREATE TABLE meeting_session (
     processing_tier TEXT NOT NULL,
     source TEXT NOT NULL,
     audio_file_path TEXT,
-    processing_artifact_path TEXT
+    processing_artifact_path TEXT,
+    last_error_message TEXT
 );
 
 selectAll:
@@ -23,9 +24,10 @@ INSERT INTO meeting_session(
     processing_tier,
     source,
     audio_file_path,
-    processing_artifact_path
+    processing_artifact_path,
+    last_error_message
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 updateStatus:
 UPDATE meeting_session
@@ -46,4 +48,9 @@ WHERE id = ?;
 attachProcessingArtifact:
 UPDATE meeting_session
 SET processing_artifact_path = ?
+WHERE id = ?;
+
+updateLastError:
+UPDATE meeting_session
+SET last_error_message = ?
 WHERE id = ?;

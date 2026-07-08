@@ -226,6 +226,13 @@ private fun SessionHistoryCard(
                     style = MaterialTheme.typography.bodySmall
                 )
             }
+            session.lastErrorMessage?.let { message ->
+                Text(
+                    text = "Last error: $message",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
             when {
                 isActive -> Button(onClick = onStopCapture) {
                     Text("Stop Capture")

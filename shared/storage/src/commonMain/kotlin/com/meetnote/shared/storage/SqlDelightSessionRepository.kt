@@ -26,7 +26,8 @@ class SqlDelightSessionRepository(
             processing_tier = session.processingTier.name,
             source = session.source.name,
             audio_file_path = session.audioFilePath,
-            processing_artifact_path = session.processingArtifactPath
+            processing_artifact_path = session.processingArtifactPath,
+            last_error_message = session.lastErrorMessage
         )
         return session
     }
@@ -45,7 +46,8 @@ class SqlDelightSessionRepository(
                         processingTier = ProcessingTier.valueOf(row.processing_tier),
                         source = SessionSource.valueOf(row.source),
                         audioFilePath = row.audio_file_path,
-                        processingArtifactPath = row.processing_artifact_path
+                        processingArtifactPath = row.processing_artifact_path,
+                        lastErrorMessage = row.last_error_message
                     )
                 }
             }
@@ -80,6 +82,13 @@ class SqlDelightSessionRepository(
     override suspend fun attachProcessingArtifact(sessionId: SessionId, processingArtifactPath: String) {
         storage.database.meetNoteDatabaseQueries.attachProcessingArtifact(
             processing_artifact_path = processingArtifactPath,
+            id = sessionId.value
+        )
+    }
+
+    override suspend fun updateLastError(sessionId: SessionId, lastErrorMessage: String?) {
+        storage.database.meetNoteDatabaseQueries.updateLastError(
+            last_error_message = lastErrorMessage,
             id = sessionId.value
         )
     }

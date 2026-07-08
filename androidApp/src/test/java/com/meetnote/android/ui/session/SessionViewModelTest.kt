@@ -299,6 +299,16 @@ private class FakeSessionRepository : SessionRepository {
             }
         }
     }
+
+    override suspend fun updateLastError(sessionId: SessionId, lastErrorMessage: String?) {
+        sessionsFlow.value = sessionsFlow.value.map { session ->
+            if (session.id == sessionId) {
+                session.copy(lastErrorMessage = lastErrorMessage)
+            } else {
+                session
+            }
+        }
+    }
 }
 
 private class FakeMeetingRecorder(

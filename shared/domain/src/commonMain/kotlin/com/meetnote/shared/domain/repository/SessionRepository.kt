@@ -18,4 +18,5 @@ interface SessionRepository {
     )
     suspend fun attachAudioFile(sessionId: SessionId, audioFilePath: String)
     suspend fun attachProcessingArtifact(sessionId: SessionId, processingArtifactPath: String)
+    suspend fun updateLastError(sessionId: SessionId, lastErrorMessage: String?)
 }

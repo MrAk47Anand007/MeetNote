@@ -25,6 +25,7 @@ Implemented areas:
 - consent-backed playback PCM capture session wired behind `PlaybackAudioRecorder`
 - first durable post-processing artifact path persisted through session storage
 - post-processing now calls a real transcription-engine seam and writes a durable transcript artifact
+- session-level last failure messages now persist through storage and render in the Android UI
 
 Task ledger status:
 
@@ -48,7 +49,7 @@ Task ledger status:
   - `CreateManualSessionUseCase`
 - `shared:storage`
   - SQLDelight `meeting_session` persistence
-  - storage of processing policy, provenance, and processing artifact path
+  - storage of processing policy, provenance, processing artifact path, and last error message
 - `shared:ai-contracts`
   - request/result scaffolding for transcription and summary
   - graceful fallback states via `AiProcessingResult`
@@ -62,6 +63,7 @@ Task ledger status:
   - playback permission state messaging
   - session history list backed by repository observation
   - direct start/stop capture controls for demo flow
+  - per-session last-error rendering
 - `android-core`
   - Android SQLDelight driver + Koin bootstrap
   - recorder bindings for microphone and playback recorder shells
@@ -108,11 +110,13 @@ Task ledger status:
   - persists `SessionStatus.RECORDED` on successful stop
   - preserves active state when stop persistence fails
   - allows cancellation to propagate instead of converting it into a normal failure
+  - persists truthful session failure messages for real start/stop failures
 - The microphone recorder still writes raw PCM rather than a richer export format like WAV, and it has not yet been validated on a physical device in this repo workflow.
 - The playback recorder now:
   - consumes one-session MediaProjection consent from in-memory authorization storage
   - builds a playback-capture `AudioRecord` path
   - persists the same capture/recorded status transitions as the microphone path
+  - persists truthful session failure messages for permission/support/start failures
   - still needs physical-device validation and broader compatibility checks across meeting apps
 - The Android UI can now:
   - create a session
@@ -131,6 +135,7 @@ Task ledger status:
   - the worker now calls `TranscriptionEngine`, writes a durable local transcript artifact, persists its path, and marks the session `COMPLETED`
   - the default local engine currently returns `UnavailableLocally`, so the artifact truthfully records that no bundled on-device ASR runtime exists yet
   - transcript generation is now a real execution seam, but not yet backed by an actual speech model
+  - processing exceptions now persist a session-level failure message before returning `FAILED`
 
 ### AI contract layer
 
@@ -142,6 +147,8 @@ Task ledger status:
   - graceful non-fatal outcomes through `AiProcessingResult`
 
 This is important because the first transcript artifact path now preserves trust metadata instead of flattening everything into a blind string.
+
+It also means the app can now carry forward the last concrete failure reason instead of losing it after the toast-level UI state disappears.
 
 ## Key Files To Start From
 
@@ -205,7 +212,7 @@ That slice should cover:
 - deciding on a durable captured-audio container format or conversion step for downstream processing
 - replacing the fallback `UnavailableLocally` transcription engine with a real on-device ASR runtime
 - validating both capture paths on physical devices and common meeting apps
-- persisting partial failure reasons or processing transitions truthfully
+- improving failure taxonomy beyond a single last-error string where retryability or user-action guidance differs
 
 ## Official Android Constraints To Respect Next
 
