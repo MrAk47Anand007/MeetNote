@@ -31,18 +31,20 @@ Implemented today:
 - MediaProjection playback-capture consent coordination shell
 - real microphone PCM capture with persistence-safe start/stop behavior
 - consent-backed playback PCM capture path
+- WAV capture output for both microphone and playback sessions
 - post-meeting WorkManager processing handoff
-- durable transcript artifact persistence
+- durable markdown meeting-note artifact persistence
 - local transcription-engine seam with explicit unavailable-local fallback
+- deterministic local summary-engine output for completed transcripts
 - persisted per-session failure messages surfaced in the Android UI
 
 Not implemented yet:
 
 - physical-device validation across target meeting apps
 - actual bundled ASR runtime integration
-- LiteRT-LM or other on-device summary model integration
+- richer model-backed summary runtime integration
 - provider fallback onboarding
-- export pipelines for markdown, text, or PDF
+- richer export pipelines beyond the persisted markdown artifact
 - calendar and email meeting context ingestion
 
 ## Product Direction
@@ -73,7 +75,7 @@ MeetNote/
 |-- android-capture/      # Recorder contracts and capture implementations
 |-- android-background/   # Foreground service and post-meeting orchestration
 |-- android-security/     # Secure storage/provider key abstractions
-|-- android-ai-local/     # Local AI runtime module scaffold
+|-- android-ai-local/     # Local summary seam and fallback implementation
 |-- android-asr/          # Android ASR seam and local fallback implementation
 |-- shared/core/          # Core result and identifier types
 |-- shared/domain/        # Session models, policies, repository interfaces, use cases
@@ -92,15 +94,17 @@ MeetNote/
 - `shared:domain` models meeting sessions, processing modes, policies, and use cases
 - `shared:storage` stores session metadata locally via SQLDelight
 - `shared:ai-contracts` defines future transcription and summarization boundaries
+- `shared:export` formats persisted meeting-note artifacts
 
 ### Android Modules
 
 - `androidApp` renders the current session UI and permission flow
 - `android-core` wires Android-specific dependencies with Koin
 - `android-capture` owns capture contracts plus microphone and playback PCM recording
-- `android-background` hosts the foreground-service capture shell and transcript-artifact processing
+- `android-background` hosts the foreground-service capture lifecycle and meeting-note artifact processing
 - `android-asr` currently exposes the transcription seam and a truthful local-unavailable fallback
-- `android-security` and `android-ai-local` remain scaffolds for the next phases
+- `android-ai-local` currently exposes a deterministic local summary engine
+- `android-security` remains a scaffold for later phases
 
 ## Current User Flow
 
@@ -112,7 +116,7 @@ The app currently supports a thin but real shell for the main capture path:
 4. Request playback capture permission through MediaProjection
 5. Fall back to microphone capture if playback capture is denied or unsupported
 6. Persist session state locally and enqueue post-meeting processing for record-first sessions
-7. Write a durable transcript artifact that records either transcript output or why local transcription is unavailable
+7. Write a durable markdown meeting-note artifact that records transcript and summary output, or why local runtimes are unavailable
 
 ## Tech Stack
 
@@ -171,7 +175,7 @@ Near-term priorities:
 - complete the playback audio recorder implementation
 - pass MediaProjection state safely into the foreground service runtime
 - replace the fallback transcription engine with a bundled local ASR runtime
-- add local summarization integration
+- upgrade the deterministic summary engine to a model-backed local summary runtime
 - add export formats and session history polish
 - add calendar and email meeting context ingestion
 

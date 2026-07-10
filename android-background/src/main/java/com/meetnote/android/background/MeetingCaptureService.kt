@@ -11,6 +11,12 @@ class MeetingCaptureService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP_CAPTURE) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
         val sessionId = intent?.getStringExtra(EXTRA_SESSION_ID) ?: "unknown-session"
         val captureSource = intent?.getStringExtra(EXTRA_CAPTURE_SOURCE) ?: CaptureSource.MICROPHONE.name
 
@@ -23,6 +29,8 @@ class MeetingCaptureService : Service() {
     }
 
     companion object {
+        const val ACTION_START_CAPTURE = "com.meetnote.android.background.action.START_CAPTURE"
+        const val ACTION_STOP_CAPTURE = "com.meetnote.android.background.action.STOP_CAPTURE"
         const val EXTRA_SESSION_ID = "extra_session_id"
         const val EXTRA_CAPTURE_SOURCE = "extra_capture_source"
     }

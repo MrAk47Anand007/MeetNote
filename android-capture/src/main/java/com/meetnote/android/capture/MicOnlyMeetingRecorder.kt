@@ -19,7 +19,7 @@ class MicOnlyMeetingRecorder internal constructor(
         sessionRepository: SessionRepository
     ) : this(
         sessionRepository = sessionRepository,
-        recordingFileFactory = { sessionId -> File(context.filesDir, "$sessionId.raw") },
+        recordingFileFactory = { sessionId -> File(context.filesDir, "$sessionId.wav") },
         audioCaptureSessionFactory = AudioCaptureSessionFactory { AndroidMicrophoneAudioCaptureSession() }
     )
 

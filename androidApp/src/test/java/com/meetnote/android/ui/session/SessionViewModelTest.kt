@@ -1,5 +1,6 @@
 package com.meetnote.android.ui.session
 
+import com.meetnote.android.background.MeetingCaptureServiceController
 import com.meetnote.android.background.PostMeetingProcessingScheduler
 import com.meetnote.android.capture.CaptureSource
 import com.meetnote.android.capture.MeetingRecorder
@@ -158,9 +159,11 @@ class SessionViewModelTest {
         val microphoneRecorder = FakeMeetingRecorder(
             startResult = RecorderResult.Started("demo.raw")
         )
+        val captureServiceController = FakeMeetingCaptureServiceController()
         val viewModel = createViewModel(
             repository = repository,
-            microphoneRecorder = microphoneRecorder
+            microphoneRecorder = microphoneRecorder,
+            captureServiceController = captureServiceController
         )
         advanceUntilIdle()
 
@@ -173,6 +176,7 @@ class SessionViewModelTest {
         advanceUntilIdle()
 
         assertEquals(listOf(sessionId), microphoneRecorder.startedSessions)
+        assertEquals(listOf(sessionId to CaptureSource.MICROPHONE), captureServiceController.startedCaptures)
         assertEquals(sessionId, viewModel.uiState.value.activeCaptureSessionId)
         assertEquals(CaptureSource.MICROPHONE, viewModel.uiState.value.activeCaptureSource)
     }
@@ -184,9 +188,11 @@ class SessionViewModelTest {
             startResult = RecorderResult.Started("demo.raw"),
             stopResult = RecorderResult.Stopped("demo.raw")
         )
+        val captureServiceController = FakeMeetingCaptureServiceController()
         val viewModel = createViewModel(
             repository = repository,
-            microphoneRecorder = microphoneRecorder
+            microphoneRecorder = microphoneRecorder,
+            captureServiceController = captureServiceController
         )
         advanceUntilIdle()
 
@@ -201,6 +207,7 @@ class SessionViewModelTest {
         advanceUntilIdle()
 
         assertEquals(listOf(sessionId), microphoneRecorder.stoppedSessions)
+        assertEquals(1, captureServiceController.stopCalls)
         assertNull(viewModel.uiState.value.activeCaptureSessionId)
         assertNull(viewModel.uiState.value.activeCaptureSource)
     }
@@ -233,9 +240,34 @@ class SessionViewModelTest {
 
         assertEquals(listOf(sessionId to "demo.raw"), scheduler.enqueued)
         assertEquals(
-            "Queued post-meeting processing scaffold for this session. AI processing is not implemented yet.",
+            "Queued post-meeting processing for this session. Local AI runtimes may still be unavailable.",
             viewModel.uiState.value.infoMessage
         )
+    }
+
+    @Test
+    fun startFailureStopsForegroundService() = runTest(dispatcher) {
+        val repository = FakeSessionRepository()
+        val captureServiceController = FakeMeetingCaptureServiceController()
+        val viewModel = createViewModel(
+            repository = repository,
+            microphoneRecorder = FakeMeetingRecorder(
+                startResult = RecorderResult.Failure("microphone unavailable")
+            ),
+            captureServiceController = captureServiceController
+        )
+        advanceUntilIdle()
+
+        viewModel.updateCaptureSource(CaptureSource.MICROPHONE)
+        viewModel.createSession()
+        advanceUntilIdle()
+
+        val sessionId = viewModel.uiState.value.createdSessionId!!
+        viewModel.startCapture(sessionId)
+        advanceUntilIdle()
+
+        assertEquals(1, captureServiceController.stopCalls)
+        assertEquals("microphone unavailable", viewModel.uiState.value.errorMessage)
     }
 
     private fun createViewModel(
@@ -245,12 +277,14 @@ class SessionViewModelTest {
             startResult = RecorderResult.Failure("Playback recorder not wired yet"),
             stopResult = RecorderResult.Failure("Playback recorder not wired yet")
         ),
+        captureServiceController: FakeMeetingCaptureServiceController = FakeMeetingCaptureServiceController(),
         scheduler: PostMeetingProcessingScheduler = FakePostMeetingProcessingScheduler()
     ): SessionViewModel = SessionViewModel(
         createManualSession = CreateManualSessionUseCase(repository),
         sessionRepository = repository,
         microphoneRecorder = microphoneRecorder,
         playbackRecorder = playbackRecorder,
+        captureServiceController = captureServiceController,
         postMeetingProcessingScheduler = scheduler
     )
 }
@@ -334,5 +368,18 @@ private class FakePostMeetingProcessingScheduler : PostMeetingProcessingSchedule
 
     override fun enqueue(sessionId: String, audioFilePath: String) {
         enqueued += sessionId to audioFilePath
+    }
+}
+
+private class FakeMeetingCaptureServiceController : MeetingCaptureServiceController {
+    val startedCaptures = mutableListOf<Pair<String, CaptureSource>>()
+    var stopCalls = 0
+
+    override fun startCapture(sessionId: String, captureSource: CaptureSource) {
+        startedCaptures += sessionId to captureSource
+    }
+
+    override fun stopCapture() {
+        stopCalls += 1
     }
 }

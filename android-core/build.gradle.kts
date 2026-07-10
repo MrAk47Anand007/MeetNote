@@ -22,6 +22,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":android-ai-local"))
     implementation(project(":android-asr"))
     implementation(project(":android-capture"))
     implementation(project(":shared:domain"))

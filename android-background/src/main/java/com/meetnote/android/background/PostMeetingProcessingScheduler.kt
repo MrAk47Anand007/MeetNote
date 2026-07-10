@@ -9,11 +9,16 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import com.meetnote.shared.ai.AiProcessingResult
+import com.meetnote.shared.ai.SummaryEngine
+import com.meetnote.shared.ai.SummaryRequest
 import com.meetnote.shared.ai.TranscriptionEngine
 import com.meetnote.shared.ai.TranscriptionRequest
 import com.meetnote.shared.core.SessionId
 import com.meetnote.shared.domain.model.SessionStatus
 import com.meetnote.shared.domain.repository.SessionRepository
+import com.meetnote.shared.export.MeetingNoteArtifact
+import com.meetnote.shared.export.MeetingNoteMarkdownFormatter
 import java.io.File
 import org.koin.core.context.GlobalContext
 import org.koin.dsl.module
@@ -78,6 +83,8 @@ interface PostMeetingProcessingExecutor {
 class DefaultPostMeetingProcessingExecutor(
     private val sessionRepository: SessionRepository,
     private val transcriptionEngine: TranscriptionEngine,
+    private val summaryEngine: SummaryEngine,
+    private val markdownFormatter: MeetingNoteMarkdownFormatter,
     private val artifactFileFactory: (String) -> File
 ) : PostMeetingProcessingExecutor {
     override suspend fun process(
@@ -92,9 +99,27 @@ class DefaultPostMeetingProcessingExecutor(
             val transcriptionResult = transcriptionEngine.transcribe(
                 TranscriptionRequest(audioPath = audioFilePath)
             )
+            val summaryResult = when (transcriptionResult) {
+                is AiProcessingResult.Completed -> summaryEngine.summarize(
+                    SummaryRequest(
+                        transcript = transcriptionResult.value,
+                        processingContext = transcriptionResult.processingContext
+                    )
+                )
+                else -> null
+            }
             val artifactFile = artifactFileFactory(sessionId).apply {
                 parentFile?.mkdirs()
-                writeText(renderTranscriptArtifact(sessionId, audioFilePath, transcriptionResult))
+                writeText(
+                    markdownFormatter.format(
+                        MeetingNoteArtifact(
+                            sessionId = sessionId,
+                            audioFilePath = audioFilePath,
+                            transcriptionResult = transcriptionResult,
+                            summaryResult = summaryResult
+                        )
+                    )
+                )
             }
 
             sessionRepository.attachProcessingArtifact(domainSessionId, artifactFile.absolutePath)
@@ -110,44 +135,6 @@ class DefaultPostMeetingProcessingExecutor(
         }
     }
 
-    private fun renderTranscriptArtifact(
-        sessionId: String,
-        audioFilePath: String,
-        transcriptionResult: com.meetnote.shared.ai.TranscriptionResult
-    ): String = buildString {
-        appendLine("MeetNote transcript artifact")
-        appendLine("session_id=$sessionId")
-        appendLine("audio_file=$audioFilePath")
-        when (transcriptionResult) {
-            is com.meetnote.shared.ai.AiProcessingResult.Completed -> {
-                appendLine("status=transcription_completed")
-                appendLine("processing_tier=${transcriptionResult.processingTier}")
-                appendLine("processing_policy=${transcriptionResult.processingContext.processingPolicy}")
-                appendLine("provider_processing_approved=${transcriptionResult.processingContext.providerProcessingApproved}")
-                appendLine("transcript=")
-                appendLine(transcriptionResult.value)
-            }
-            is com.meetnote.shared.ai.AiProcessingResult.Deferred -> {
-                appendLine("status=transcription_deferred")
-                appendLine("processing_policy=${transcriptionResult.processingContext.processingPolicy}")
-                appendLine("provider_processing_approved=${transcriptionResult.processingContext.providerProcessingApproved}")
-                appendLine("message=${transcriptionResult.message ?: "Transcription was deferred."}")
-            }
-            is com.meetnote.shared.ai.AiProcessingResult.RequiresProviderApproval -> {
-                appendLine("status=provider_approval_required")
-                appendLine("processing_policy=${transcriptionResult.processingContext.processingPolicy}")
-                appendLine("provider_processing_approved=${transcriptionResult.processingContext.providerProcessingApproved}")
-                appendLine("message=${transcriptionResult.message ?: "Provider processing approval is required."}")
-            }
-            is com.meetnote.shared.ai.AiProcessingResult.UnavailableLocally -> {
-                appendLine("status=transcription_unavailable_locally")
-                appendLine("processing_policy=${transcriptionResult.processingContext.processingPolicy}")
-                appendLine("provider_processing_approved=${transcriptionResult.processingContext.providerProcessingApproved}")
-                appendLine("message=${transcriptionResult.message ?: "No local transcription runtime is available."}")
-            }
-        }
-    }
-
     private suspend fun bestEffortUpdateLastError(sessionId: SessionId, message: String?) {
         try {
             sessionRepository.updateLastError(sessionId, message)
@@ -158,12 +145,16 @@ class DefaultPostMeetingProcessingExecutor(
 
 val androidBackgroundModule = module {
     single { WorkManager.getInstance(get()) }
+    single<MeetingCaptureServiceController> { AndroidMeetingCaptureServiceController(get()) }
     single<PostMeetingProcessingScheduler> { WorkManagerPostMeetingProcessingScheduler(get()) }
+    single { MeetingNoteMarkdownFormatter() }
     single<PostMeetingProcessingExecutor> {
         DefaultPostMeetingProcessingExecutor(
             sessionRepository = get(),
             transcriptionEngine = get(),
-            artifactFileFactory = { sessionId -> File(get<Context>().filesDir, "$sessionId-processing.txt") }
+            summaryEngine = get(),
+            markdownFormatter = get(),
+            artifactFileFactory = { sessionId -> File(get<Context>().filesDir, "$sessionId-meeting-note.md") }
         )
     }
 }

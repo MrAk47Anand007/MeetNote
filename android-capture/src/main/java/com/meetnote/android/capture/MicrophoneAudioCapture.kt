@@ -4,7 +4,6 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import java.io.File
-import java.io.FileOutputStream
 import java.util.concurrent.atomic.AtomicBoolean
 
 internal interface AudioCaptureSession {
@@ -51,7 +50,6 @@ internal class AndroidMicrophoneAudioCaptureSession : AudioCaptureSession {
             if (outputFile.exists()) {
                 outputFile.delete()
             }
-            outputFile.createNewFile()
 
             recorder.startRecording()
             audioRecord = recorder
@@ -60,7 +58,9 @@ internal class AndroidMicrophoneAudioCaptureSession : AudioCaptureSession {
                     recorder = recorder,
                     outputFile = outputFile,
                     isCapturing = isCapturing,
-                    bufferSize = bufferSize
+                    bufferSize = bufferSize,
+                    sampleRateHz = sampleRate,
+                    channelCount = 1
                 ),
                 "meetnote-mic-capture"
             ).apply { start() }
@@ -98,18 +98,24 @@ internal class AndroidMicrophoneAudioCaptureSession : AudioCaptureSession {
         private val recorder: AudioRecord,
         private val outputFile: File,
         private val isCapturing: AtomicBoolean,
-        private val bufferSize: Int
+        private val bufferSize: Int,
+        private val sampleRateHz: Int,
+        private val channelCount: Int
     ) : Runnable {
         override fun run() {
             val buffer = ByteArray(bufferSize)
-            FileOutputStream(outputFile).use { output ->
+            WavFileWriter(
+                outputFile = outputFile,
+                sampleRateHz = sampleRateHz,
+                channelCount = channelCount,
+                bitsPerSample = 16
+            ).use { output ->
                 while (isCapturing.get()) {
                     val bytesRead = recorder.read(buffer, 0, buffer.size)
                     if (bytesRead > 0) {
-                        output.write(buffer, 0, bytesRead)
+                        output.write(buffer, bytesRead)
                     }
                 }
-                output.fd.sync()
             }
         }
     }

@@ -2,6 +2,9 @@ package com.meetnote.android.background
 
 import com.meetnote.shared.ai.AiProcessingContext
 import com.meetnote.shared.ai.AiProcessingResult
+import com.meetnote.shared.ai.SummaryEngine
+import com.meetnote.shared.ai.SummaryRequest
+import com.meetnote.shared.ai.SummaryResult
 import com.meetnote.shared.ai.TranscriptionEngine
 import com.meetnote.shared.ai.TranscriptionRequest
 import com.meetnote.shared.ai.TranscriptionResult
@@ -11,6 +14,7 @@ import com.meetnote.shared.domain.model.ProcessingPolicy
 import com.meetnote.shared.domain.model.ProcessingTier
 import com.meetnote.shared.domain.model.SessionStatus
 import com.meetnote.shared.domain.repository.SessionRepository
+import com.meetnote.shared.export.MeetingNoteMarkdownFormatter
 import java.io.File
 import java.nio.file.Files
 import kotlinx.coroutines.flow.Flow
@@ -37,7 +41,14 @@ class DefaultPostMeetingProcessingExecutorTest {
         val result = DefaultPostMeetingProcessingExecutor(
             sessionRepository = repository,
             transcriptionEngine = transcriptionEngine,
-            artifactFileFactory = { id -> File(tempDir, "$id-processing.txt") }
+            summaryEngine = FakeSummaryEngine(
+                result = AiProcessingResult.UnavailableLocally(
+                    processingContext = AiProcessingContext(),
+                    message = "No local summary model is installed."
+                )
+            ),
+            markdownFormatter = MeetingNoteMarkdownFormatter(),
+            artifactFileFactory = { id -> File(tempDir, "$id-meeting-note.md") }
         )
             .process(sessionId, audioFile.absolutePath)
 
@@ -53,8 +64,10 @@ class DefaultPostMeetingProcessingExecutorTest {
         val artifactFile = File(repository.processingArtifacts.single().processingArtifactPath)
         assertTrue(artifactFile.exists())
         val artifactContents = artifactFile.readText()
-        assertTrue(artifactContents.contains("status=transcription_unavailable_locally"))
-        assertTrue(artifactContents.contains("message=No local model is installed."))
+        assertTrue(artifactContents.contains("## Transcript"))
+        assertTrue(artifactContents.contains("unavailable-locally"))
+        assertTrue(artifactContents.contains("No local model is installed."))
+        assertTrue(artifactContents.contains("Summary was not attempted"))
         assertEquals(listOf(audioFile.absolutePath), transcriptionEngine.requestedAudioPaths)
         assertEquals(listOf(ProcessingErrorUpdate(SessionId(sessionId), null)), repository.processingErrors)
     }
@@ -70,21 +83,32 @@ class DefaultPostMeetingProcessingExecutorTest {
                 processingTier = ProcessingTier.PRIMARY_LOCAL
             )
         )
+        val summaryEngine = FakeSummaryEngine(
+            result = AiProcessingResult.Completed(
+                value = "Meeting summary output.",
+                processingContext = AiProcessingContext(processingPolicy = ProcessingPolicy.LOCAL_ONLY),
+                processingTier = ProcessingTier.SMALLER_LOCAL
+            )
+        )
         val sessionId = "session-b"
         val audioFile = File(tempDir, "session-b.raw").apply { writeText("pcm") }
 
         val result = DefaultPostMeetingProcessingExecutor(
             sessionRepository = repository,
             transcriptionEngine = transcriptionEngine,
-            artifactFileFactory = { id -> File(tempDir, "$id-processing.txt") }
+            summaryEngine = summaryEngine,
+            markdownFormatter = MeetingNoteMarkdownFormatter(),
+            artifactFileFactory = { id -> File(tempDir, "$id-meeting-note.md") }
         )
             .process(sessionId, audioFile.absolutePath)
 
         assertEquals(androidx.work.ListenableWorker.Result.success()::class, result::class)
         val artifactContents = File(repository.processingArtifacts.single().processingArtifactPath).readText()
-        assertTrue(artifactContents.contains("status=transcription_completed"))
-        assertTrue(artifactContents.contains("processing_tier=PRIMARY_LOCAL"))
+        assertTrue(artifactContents.contains("Status: completed"))
+        assertTrue(artifactContents.contains("Processing Tier: `PRIMARY_LOCAL`"))
         assertTrue(artifactContents.contains("Hello from the meeting transcript."))
+        assertTrue(artifactContents.contains("Meeting summary output."))
+        assertEquals(listOf("Hello from the meeting transcript."), summaryEngine.requestedTranscripts)
     }
 
     @Test
@@ -93,6 +117,8 @@ class DefaultPostMeetingProcessingExecutorTest {
         val result = DefaultPostMeetingProcessingExecutor(
             sessionRepository = repository,
             transcriptionEngine = FakeTranscriptionEngine(result = AiProcessingResult.Deferred(AiProcessingContext())),
+            summaryEngine = FakeSummaryEngine(result = AiProcessingResult.Deferred(AiProcessingContext())),
+            markdownFormatter = MeetingNoteMarkdownFormatter(),
             artifactFileFactory = { error("artifact creation failed") }
         ).process("session-c", "missing.raw")
 
@@ -171,6 +197,17 @@ class DefaultPostMeetingProcessingExecutorTest {
 
         override suspend fun transcribe(request: TranscriptionRequest): TranscriptionResult {
             requestedAudioPaths += request.audioPath
+            return result
+        }
+    }
+
+    private class FakeSummaryEngine(
+        private val result: SummaryResult
+    ) : SummaryEngine {
+        val requestedTranscripts = mutableListOf<String>()
+
+        override suspend fun summarize(request: SummaryRequest): SummaryResult {
+            requestedTranscripts += request.transcript
             return result
         }
     }

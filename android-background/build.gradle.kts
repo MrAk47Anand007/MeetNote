@@ -22,6 +22,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":shared:export"))
     implementation(project(":android-capture"))
     implementation(project(":shared:ai-contracts"))
     implementation(project(":shared:storage"))

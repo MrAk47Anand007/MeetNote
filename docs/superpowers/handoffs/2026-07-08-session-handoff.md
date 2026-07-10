@@ -26,6 +26,10 @@ Implemented areas:
 - first durable post-processing artifact path persisted through session storage
 - post-processing now calls a real transcription-engine seam and writes a durable transcript artifact
 - session-level last failure messages now persist through storage and render in the Android UI
+- both capture paths now write WAV output instead of raw PCM files
+- capture start/stop now owns the foreground service lifecycle through a service controller
+- post-processing now writes a markdown meeting-note artifact with transcript and summary sections
+- local deterministic summary generation now exists beside the local transcription fallback
 
 Task ledger status:
 
@@ -53,6 +57,8 @@ Task ledger status:
 - `shared:ai-contracts`
   - request/result scaffolding for transcription and summary
   - graceful fallback states via `AiProcessingResult`
+- `shared:export`
+  - markdown formatter for persisted meeting-note artifacts
 
 ### Android modules
 
@@ -77,14 +83,16 @@ Task ledger status:
   - recorder lifecycle hardening, repository persistence, retry-safe stop behavior
   - playback support helper and consent-backed playback recorder
 - `android-background`
-  - `MeetingCaptureService` shell
+  - `MeetingCaptureService`
+  - `MeetingCaptureServiceController`
   - foreground notification factory
   - `PostMeetingProcessingWorker` plus WorkManager scheduler wiring
-  - executor-backed transcript artifact generation
+  - executor-backed meeting-note artifact generation
 - `android-security`
   - `ProviderKeyStore` interface shell
 - `android-ai-local`
-  - module shell only
+  - `LocalSummaryEngine`
+  - deterministic local summary generation for completed transcripts
 - `android-asr`
   - `LocalTranscriptionEngine`
   - honest local-unavailable fallback until a bundled ASR runtime is added
@@ -104,6 +112,7 @@ Task ledger status:
   - `MicOnlyMeetingRecorder`
   - `PlaybackAudioRecorder` when the session has valid MediaProjection consent
 - The microphone recorder performs real PCM capture to a raw file and also:
+- The microphone recorder now writes WAV output and also:
   - blocks overlapping starts
   - persists `SessionStatus.CAPTURING` on start
   - persists attached audio path on stop
@@ -111,7 +120,7 @@ Task ledger status:
   - preserves active state when stop persistence fails
   - allows cancellation to propagate instead of converting it into a normal failure
   - persists truthful session failure messages for real start/stop failures
-- The microphone recorder still writes raw PCM rather than a richer export format like WAV, and it has not yet been validated on a physical device in this repo workflow.
+- It has not yet been validated on a physical device in this repo workflow.
 - The playback recorder now:
   - consumes one-session MediaProjection consent from in-memory authorization storage
   - builds a playback-capture `AudioRecord` path
@@ -123,7 +132,8 @@ Task ledger status:
   - show persisted session history
   - start microphone capture for a stored session
   - stop that capture and reflect recorded state plus audio file path
-  - enqueue a post-meeting processing scaffold when a `RECORD_THEN_PROCESS` session stops
+  - start and stop the foreground capture service alongside the recorder lifecycle
+  - enqueue post-meeting processing when a `RECORD_THEN_PROCESS` session stops
 - Playback capture is still partially wired overall:
   - MediaProjection consent flow exists
   - granted consent is now handed into the capture layer
@@ -132,9 +142,11 @@ Task ledger status:
 - Post-meeting processing is only partially wired:
   - WorkManager enqueue is real
   - session-level UI feedback is real
-  - the worker now calls `TranscriptionEngine`, writes a durable local transcript artifact, persists its path, and marks the session `COMPLETED`
+  - the worker now calls both `TranscriptionEngine` and `SummaryEngine`
+  - it writes a durable local markdown meeting-note artifact, persists its path, and marks the session `COMPLETED`
   - the default local engine currently returns `UnavailableLocally`, so the artifact truthfully records that no bundled on-device ASR runtime exists yet
-  - transcript generation is now a real execution seam, but not yet backed by an actual speech model
+  - the local summary engine now produces a deterministic summary when transcript text exists
+  - transcript generation is still blocked on a real local speech runtime, while summary generation is now functional without a model dependency
   - processing exceptions now persist a session-level failure message before returning `FAILED`
 
 ### AI contract layer
@@ -163,8 +175,11 @@ It also means the app can now carry forward the last concrete failure reason ins
 - [android-capture/src/main/java/com/meetnote/android/capture/RecorderSessionState.kt](C:\Users\Anand\OneDrive - Xalta Technology Services Pvt Ltd\Desktop\SelfProjects\MeetNote\android-capture\src\main\java\com\meetnote\android\capture\RecorderSessionState.kt)
 - [androidApp/src/main/java/com/meetnote/android/MainActivity.kt](C:\Users\Anand\OneDrive - Xalta Technology Services Pvt Ltd\Desktop\SelfProjects\MeetNote\androidApp\src\main\java\com\meetnote\android\MainActivity.kt)
 - [android-background/src/main/java/com/meetnote/android/background/MeetingCaptureService.kt](C:\Users\Anand\OneDrive - Xalta Technology Services Pvt Ltd\Desktop\SelfProjects\MeetNote\android-background\src\main\java\com\meetnote\android\background\MeetingCaptureService.kt)
+- [android-background/src/main/java/com/meetnote/android/background/MeetingCaptureServiceController.kt](C:\Users\Anand\OneDrive - Xalta Technology Services Pvt Ltd\Desktop\SelfProjects\MeetNote\android-background\src\main\java\com\meetnote\android\background\MeetingCaptureServiceController.kt)
 - [android-background/src/main/java/com/meetnote/android/background/PostMeetingProcessingScheduler.kt](C:\Users\Anand\OneDrive - Xalta Technology Services Pvt Ltd\Desktop\SelfProjects\MeetNote\android-background\src\main\java\com\meetnote\android\background\PostMeetingProcessingScheduler.kt)
+- [android-ai-local/src/main/java/com/meetnote/android/ailocal/LocalSummaryEngine.kt](C:\Users\Anand\OneDrive - Xalta Technology Services Pvt Ltd\Desktop\SelfProjects\MeetNote\android-ai-local\src\main\java\com\meetnote\android\ailocal\LocalSummaryEngine.kt)
 - [android-asr/src/main/java/com/meetnote/android/asr/LocalTranscriptionEngine.kt](C:\Users\Anand\OneDrive - Xalta Technology Services Pvt Ltd\Desktop\SelfProjects\MeetNote\android-asr\src\main\java\com\meetnote\android\asr\LocalTranscriptionEngine.kt)
+- [shared/export/src/commonMain/kotlin/com/meetnote/shared/export/MeetingNoteMarkdownFormatter.kt](C:\Users\Anand\OneDrive - Xalta Technology Services Pvt Ltd\Desktop\SelfProjects\MeetNote\shared\export\src\commonMain\kotlin\com\meetnote\shared\export\MeetingNoteMarkdownFormatter.kt)
 - [shared/domain/src/commonMain/kotlin/com/meetnote/shared/domain/repository/SessionRepository.kt](C:\Users\Anand\OneDrive - Xalta Technology Services Pvt Ltd\Desktop\SelfProjects\MeetNote\shared\domain\src\commonMain\kotlin\com\meetnote\shared\domain\repository\SessionRepository.kt)
 - [shared/storage/src/commonMain/kotlin/com/meetnote/shared/storage/SqlDelightSessionRepository.kt](C:\Users\Anand\OneDrive - Xalta Technology Services Pvt Ltd\Desktop\SelfProjects\MeetNote\shared\storage\src\commonMain\kotlin\com\meetnote\shared\storage\SqlDelightSessionRepository.kt)
 - [shared/ai-contracts/src/commonMain/kotlin/com/meetnote/shared/ai/AiProcessingResult.kt](C:\Users\Anand\OneDrive - Xalta Technology Services Pvt Ltd\Desktop\SelfProjects\MeetNote\shared\ai-contracts\src\commonMain\kotlin\com\meetnote\shared\ai\AiProcessingResult.kt)
@@ -204,13 +219,12 @@ Reason:
 
 - the app now has a usable create-and-record shell for microphone demo flow
 - playback capture now has a real consent-backed recorder path in code
-- there is now a real microphone PCM capture path, a real playback PCM capture path, and a durable transcript artifact path, but no bundled speech model or summarization runtime yet
+- there is now a real microphone WAV capture path, a real playback WAV capture path, a service-backed capture lifecycle, and a durable meeting-note artifact path, but no bundled speech or summary models yet
 
 That slice should cover:
 
-- passing capture/runtime state into the service instead of keeping it as metadata-only shell wiring
-- deciding on a durable captured-audio container format or conversion step for downstream processing
 - replacing the fallback `UnavailableLocally` transcription engine with a real on-device ASR runtime
+- upgrading the deterministic local summary engine to a model-backed local summary runtime
 - validating both capture paths on physical devices and common meeting apps
 - improving failure taxonomy beyond a single last-error string where retryability or user-action guidance differs
 

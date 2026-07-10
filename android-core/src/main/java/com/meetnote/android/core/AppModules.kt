@@ -5,6 +5,7 @@ import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import app.cash.sqldelight.db.SqlDriver
 import app.cash.sqldelight.driver.android.AndroidSqliteDriver
+import com.meetnote.android.ailocal.androidAiLocalModule
 import com.meetnote.android.asr.androidAsrModule
 import com.meetnote.android.capture.MeetingRecorder
 import com.meetnote.android.capture.MicOnlyMeetingRecorder
@@ -41,7 +42,7 @@ private val coreModule = module {
     }
 }
 
-val appModules: List<Module> = listOf(coreModule, androidAsrModule)
+val appModules: List<Module> = listOf(coreModule, androidAsrModule, androidAiLocalModule)
 
 private fun provideSqlDriver(context: Context): SqlDriver =
     AndroidSqliteDriver(

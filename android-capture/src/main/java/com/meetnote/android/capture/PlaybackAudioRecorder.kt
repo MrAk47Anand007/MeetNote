@@ -14,7 +14,6 @@ import com.meetnote.shared.core.SessionId
 import com.meetnote.shared.domain.model.SessionStatus
 import com.meetnote.shared.domain.repository.SessionRepository
 import java.io.File
-import java.io.FileOutputStream
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
@@ -34,7 +33,7 @@ class PlaybackAudioRecorder internal constructor(
     ) : this(
         sessionRepository = sessionRepository,
         authorizationStore = authorizationStore,
-        recordingFileFactory = { sessionId -> File(context.filesDir, "$sessionId-playback.raw") },
+        recordingFileFactory = { sessionId -> File(context.filesDir, "$sessionId-playback.wav") },
         playbackCaptureSessionFactory = PlaybackCaptureSessionFactory {
             AndroidPlaybackAudioCaptureSession(
                 mediaProjectionManager = context.getSystemService(MediaProjectionManager::class.java)
@@ -229,12 +228,17 @@ internal class AndroidPlaybackAudioCaptureSession(
             if (outputFile.exists()) {
                 outputFile.delete()
             }
-            outputFile.createNewFile()
 
             recorder.startRecording()
             audioRecord = recorder
             captureThread = Thread(
-                PlaybackPcmWriter(recorder, outputFile, isCapturing, bufferSize),
+                PlaybackPcmWriter(
+                    recorder = recorder,
+                    outputFile = outputFile,
+                    isCapturing = isCapturing,
+                    bufferSize = bufferSize,
+                    channelCount = 2
+                ),
                 "meetnote-playback-capture"
             ).apply { start() }
         } catch (exception: Exception) {
@@ -270,18 +274,23 @@ internal class AndroidPlaybackAudioCaptureSession(
         private val recorder: AudioRecord,
         private val outputFile: File,
         private val isCapturing: AtomicBoolean,
-        private val bufferSize: Int
+        private val bufferSize: Int,
+        private val channelCount: Int
     ) : Runnable {
         override fun run() {
             val buffer = ByteArray(bufferSize)
-            FileOutputStream(outputFile).use { output ->
+            WavFileWriter(
+                outputFile = outputFile,
+                sampleRateHz = SAMPLE_RATE_HZ,
+                channelCount = channelCount,
+                bitsPerSample = 16
+            ).use { output ->
                 while (isCapturing.get()) {
                     val bytesRead = recorder.read(buffer, 0, buffer.size)
                     if (bytesRead > 0) {
-                        output.write(buffer, 0, bytesRead)
+                        output.write(buffer, bytesRead)
                     }
                 }
-                output.fd.sync()
             }
         }
     }

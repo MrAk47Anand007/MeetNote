@@ -135,3 +135,97 @@ Observed warnings/non-blockers:
 - existing Gradle 9 deprecation warning
 
 Neither warning blocked the Task 7 compile targets.
+
+---
+
+## Second Fix Pass: Review 86edda3..97c7bfa
+
+### Scope Kept Narrow
+
+This second pass stayed inside the Task 7 ownership boundary only:
+
+- `shared/ai-contracts`
+- existing Android shell modules from Task 7
+- this report file
+
+No app wiring, runtime behavior, local-model integration, provider integration, or non-Task-7 module edits were introduced.
+
+### Review Finding Addressed
+
+The first fix pass made the contracts policy-aware and provenance-aware, but the result types still modeled only a completed success payload:
+
+- `TranscriptionResult` always required a transcript
+- `SummaryResult` always required a summary
+
+That meant callers still had no typed, in-band way to represent graceful non-fatal outcomes such as:
+
+- provider approval required before continuing
+- work intentionally deferred for later processing
+- local processing currently unavailable
+
+### Contract Adjustment
+
+I replaced the happy-path-only result payloads with a lightweight sealed outcome shape that follows the repo's existing simple result-style pattern without adding runtime behavior.
+
+Added:
+
+- `AiProcessingResult<T>`
+  - `Completed<T>`
+  - `RequiresProviderApproval`
+  - `Deferred`
+  - `UnavailableLocally`
+
+Kept and reused:
+
+- `AiProcessingContext`
+  - `processingPolicy: ProcessingPolicy`
+  - `providerProcessingApproved: Boolean`
+- `ProcessingTier` on completed outcomes for provenance reporting
+
+Updated aliases:
+
+- `TranscriptionResult = AiProcessingResult<String>`
+- `SummaryResult = AiProcessingResult<String>`
+
+Requests remain unchanged:
+
+- `TranscriptionRequest`
+- `SummaryRequest`
+
+### Why This Fix Is The Right Shape
+
+This keeps Task 7 scaffolding-only while making the shared interface expressive enough for later implementations to return non-throwing fallback states in-band:
+
+- `Completed` carries the produced value plus `processingContext` and `processingTier`
+- `RequiresProviderApproval` preserves policy/approval context when provider escalation is blocked pending consent
+- `Deferred` allows later-stage scheduling or model-readiness flows to stay typed without pretending work already succeeded
+- `UnavailableLocally` allows local-only flows to terminate gracefully when no local path is currently available
+
+This also stays consistent with the repo's existing lightweight sealed result approach instead of inventing a heavier runtime abstraction.
+
+### Files Updated In This Pass
+
+- `shared/ai-contracts/src/commonMain/kotlin/com/meetnote/shared/ai/AiProcessingResult.kt`
+- `shared/ai-contracts/src/commonMain/kotlin/com/meetnote/shared/ai/TranscriptionEngine.kt`
+- `shared/ai-contracts/src/commonMain/kotlin/com/meetnote/shared/ai/SummaryEngine.kt`
+- `.superpowers/sdd/task-7-report.md`
+
+Android shell modules did not need code changes in this pass.
+
+### Verification
+
+Re-ran the focused Task 7 compile targets:
+
+- `.\gradlew.bat :shared:ai-contracts:compileDebugKotlinAndroid :android-security:compileDebugKotlin :android-ai-local:compileDebugKotlin :android-asr:compileDebugKotlin`
+
+Result:
+
+- `BUILD SUCCESSFUL in 33s`
+- `38 actionable tasks: 1 executed, 37 up-to-date`
+
+Observed warnings/non-blockers:
+
+- existing Kotlin Multiplatform vs AGP 8.6.1 compatibility warning
+- existing Gradle 9 deprecation warning
+
+Neither warning blocked the Task 7 targets.

@@ -20,3 +20,11 @@ android {
         jvmTarget = "17"
     }
 }
+
+dependencies {
+    implementation(project(":shared:ai-contracts"))
+    implementation(project(":shared:domain"))
+    implementation(libs.koin.android)
+
+    testImplementation(libs.junit4)
+}

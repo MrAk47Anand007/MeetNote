@@ -1,5 +1,6 @@
 package com.meetnote.android.ui.session
 
+import com.meetnote.android.background.MeetingCaptureServiceController
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.meetnote.android.background.PostMeetingProcessingScheduler
@@ -41,6 +42,7 @@ class SessionViewModel(
     private val sessionRepository: SessionRepository,
     private val microphoneRecorder: MeetingRecorder,
     private val playbackRecorder: MeetingRecorder,
+    private val captureServiceController: MeetingCaptureServiceController,
     private val postMeetingProcessingScheduler: PostMeetingProcessingScheduler
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SessionUiState())
@@ -154,6 +156,7 @@ class SessionViewModel(
         }
 
         viewModelScope.launch {
+            captureServiceController.startCapture(sessionId, selectedSource)
             when (val result = recorderFor(selectedSource).start(sessionId)) {
                 is RecorderResult.Started -> {
                     _uiState.value = _uiState.value.copy(
@@ -165,6 +168,7 @@ class SessionViewModel(
                 }
 
                 is RecorderResult.Failure -> {
+                    captureServiceController.stopCapture()
                     _uiState.value = _uiState.value.copy(errorMessage = result.message)
                 }
 
@@ -180,6 +184,7 @@ class SessionViewModel(
         viewModelScope.launch {
             when (val result = recorderFor(captureSource).stop(sessionId)) {
                 is RecorderResult.Stopped -> {
+                    captureServiceController.stopCapture()
                     val session = _uiState.value.sessions.firstOrNull { it.id.value == sessionId }
                     val queuedProcessing = session?.processingMode == ProcessingMode.RECORD_THEN_PROCESS
                     if (queuedProcessing) {
@@ -189,7 +194,7 @@ class SessionViewModel(
                         activeCaptureSessionId = null,
                         activeCaptureSource = null,
                         infoMessage = if (queuedProcessing) {
-                            "Queued post-meeting processing scaffold for this session. AI processing is not implemented yet."
+                            "Queued post-meeting processing for this session. Local AI runtimes may still be unavailable."
                         } else {
                             "Capture stopped. Session is ready for the next live-assist step."
                         },
@@ -221,6 +226,7 @@ val androidUiModule = module {
             sessionRepository = get(),
             microphoneRecorder = get(named(MICROPHONE_RECORDER_QUALIFIER)),
             playbackRecorder = get(named(PLAYBACK_RECORDER_QUALIFIER)),
+            captureServiceController = get(),
             postMeetingProcessingScheduler = get()
         )
     }

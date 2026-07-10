@@ -85,3 +85,16 @@ Verification:
 Tests updated:
 - `android-capture/src/test/java/com/meetnote/android/capture/MicOnlyMeetingRecorderTest.kt`
 - Added cancellation propagation coverage for `start()` and `stop()` alongside the existing failure-mapping tests
+
+Sixth fix pass:
+- Tightened the recorded-status stop-path tests so they now retry `stop("session-a")` after the exact failure and cancellation branches that run after `SessionRepository.attachAudioFile(...)` succeeds.
+- Added explicit assertions that the recorder state survives both branches and that the later retry completes successfully with `RecorderResult.Stopped(...)` on the same session.
+- Kept the implementation unchanged; this pass was test-only plus report evidence.
+
+Verification:
+- `.\gradlew.bat :android-capture:compileDebugKotlin` passed
+- `.\gradlew.bat :android-capture:testDebugUnitTest` passed
+
+Tests updated:
+- `android-capture/src/test/java/com/meetnote/android/capture/MicOnlyMeetingRecorderTest.kt`
+- Expanded the `RECORDED` status failure and cancellation tests to prove same-session retry success after the branch-specific failure/cancellation
