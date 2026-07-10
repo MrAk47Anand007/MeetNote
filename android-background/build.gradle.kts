@@ -30,6 +30,7 @@ dependencies {
     implementation(project(":shared:core"))
     implementation(libs.androidx.work.runtime)
     implementation(libs.koin.android)
+    implementation(libs.kotlinx.coroutines.core)
 
     testImplementation(libs.junit4)
 }

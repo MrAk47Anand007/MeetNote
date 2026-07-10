@@ -21,6 +21,7 @@ import com.meetnote.shared.export.MeetingNoteArtifact
 import com.meetnote.shared.export.MeetingNoteMarkdownFormatter
 import java.io.File
 import org.koin.core.context.GlobalContext
+import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
 interface PostMeetingProcessingScheduler {
@@ -147,6 +148,13 @@ val androidBackgroundModule = module {
     single { WorkManager.getInstance(get()) }
     single<MeetingCaptureServiceController> { AndroidMeetingCaptureServiceController(get()) }
     single<PostMeetingProcessingScheduler> { WorkManagerPostMeetingProcessingScheduler(get()) }
+    single { ActiveCaptureSession() }
+    single {
+        CaptureCommandCoordinator(
+            microphoneRecorder = get(named("microphoneRecorder")),
+            playbackRecorder = get(named("playbackRecorder"))
+        )
+    }
     single { MeetingNoteMarkdownFormatter() }
     single<PostMeetingProcessingExecutor> {
         DefaultPostMeetingProcessingExecutor(
